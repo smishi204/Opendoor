@@ -1,0 +1,62 @@
+{
+  "name": "opendoor-mcp-server",
+  "version": "2.0.0",
+  "description": "Production-grade MCP server with multi-language code execution, VS Code integration, and browser automation",
+  "main": "mcp-server/dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "start": "npm run start --workspace=mcp-server",
+    "dev": "npm run dev --workspace=mcp-server",
+    "build": "npm run build --workspace=mcp-server",
+    "test": "npm run test --workspace=mcp-server",
+    "lint": "npm run lint --workspace=mcp-server",
+    "lint:fix": "npm run lint:fix --workspace=mcp-server",
+    "docker:build": "docker build -t opendoor-mcp .",
+    "docker:run": "docker run -d -p 3000:3000 -v /var/run/docker.sock:/var/run/docker.sock --privileged opendoor-mcp",
+    "health": "curl -f http://localhost:3000/health || exit 1",
+    "clean": "npm run clean --workspace=mcp-server && docker system prune -f",
+    "setup": "npm install && npm run build"
+  },
+  "workspaces": [
+    "mcp-server"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "large-language-models",
+    "code-execution",
+    "vscode",
+    "playwright",
+    "docker",
+    "containers",
+    "browser-automation",
+    "production-grade",
+    "high-performance",
+    "fast-boot",
+    "security",
+    "enterprise"
+  ],
+  "author": "Opendoor Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smishi204/Opendoor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/smishi204/Opendoor/issues"
+  },
+  "homepage": "https://github.com/smishi204/Opendoor#readme",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/openhands-mentat-cli"
+  },
+  "volta": {
+    "node": "22.0.0",
+    "npm": "10.5.1"
+  }
+}
