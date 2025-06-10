@@ -69,7 +69,7 @@ export class McpServer {
       this.cleanup(clientId);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       this.logger.error(`SSE connection error for ${clientId}:`, error);
       this.cleanup(clientId);
     });
