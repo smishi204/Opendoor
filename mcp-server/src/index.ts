@@ -3,7 +3,7 @@
 import { MCPServer } from '@ronangrant/mcp-framework';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,7 +36,7 @@ async function startWebInterface(port: number) {
   app.use(express.json());
 
   // Health endpoint
-  app.get('/health', (req, res) => {
+  app.get('/health', (req: Request, res: Response) => {
     res.json({ 
       status: 'healthy', 
       timestamp: new Date().toISOString(),
@@ -49,7 +49,7 @@ async function startWebInterface(port: number) {
   });
 
   // MCP configuration endpoints
-  app.get('/config/sse', (req, res) => {
+  app.get('/config/sse', (req: Request, res: Response) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`.replace(`:${port}`, `:${port - 1}`);
     res.json({
       mcpServers: {
@@ -64,7 +64,7 @@ async function startWebInterface(port: number) {
     });
   });
 
-  app.get('/config/stdio', (req, res) => {
+  app.get('/config/stdio', (req: Request, res: Response) => {
     res.json({
       mcpServers: {
         "opendoor": {
@@ -80,7 +80,7 @@ async function startWebInterface(port: number) {
   });
 
   // Documentation page
-  app.get('/', (req, res) => {
+  app.get('/', (req: Request, res: Response) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`.replace(`:${port}`, `:${port - 1}`);
     res.send(generateDocumentationHTML(baseUrl, port - 1));
   });

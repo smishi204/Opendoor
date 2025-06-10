@@ -247,7 +247,7 @@ export class ContainerManager {
         }
       });
 
-      const cleanupPromises = containers.map(async (containerInfo) => {
+      const cleanupPromises = containers.map(async (containerInfo: Docker.ContainerInfo) => {
         try {
           const container = this.docker.getContainer(containerInfo.Id);
           await container.remove({ force: true });
