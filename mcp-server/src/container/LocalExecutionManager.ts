@@ -393,7 +393,7 @@ export class LocalExecutionManager {
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
-      let process: ChildProcess;
+      let childProcess: ChildProcess;
 
       // Determine execution command based on language
       const getCommand = () => {
@@ -436,34 +436,34 @@ export class LocalExecutionManager {
 
       try {
         const [command, ...args] = getCommand();
-        process = spawn(command, args, {
+        childProcess = spawn(command, args, {
           cwd: session.workspaceDir,
           env: { ...process.env, PATH: process.env.PATH },
           stdio: 'pipe'
         });
 
         // Handle stdin if provided
-        if (params.stdin && process.stdin) {
-          process.stdin.write(params.stdin);
-          process.stdin.end();
+        if (params.stdin && childProcess.stdin) {
+          childProcess.stdin.write(params.stdin);
+          childProcess.stdin.end();
         }
 
         // Collect stdout
-        if (process.stdout) {
-          process.stdout.on('data', (data) => {
+        if (childProcess.stdout) {
+          childProcess.stdout.on('data', (data) => {
             stdout += data.toString();
           });
         }
 
         // Collect stderr
-        if (process.stderr) {
-          process.stderr.on('data', (data) => {
+        if (childProcess.stderr) {
+          childProcess.stderr.on('data', (data) => {
             stderr += data.toString();
           });
         }
 
         // Handle process completion
-        process.on('close', (exitCode) => {
+        childProcess.on('close', (exitCode) => {
           const executionTime = Date.now() - startTime;
           resolve({
             stdout: stdout.trim(),
@@ -475,11 +475,11 @@ export class LocalExecutionManager {
 
         // Handle timeout
         const timeoutHandle = setTimeout(() => {
-          if (process && !process.killed) {
-            process.kill('SIGTERM');
+          if (childProcess && !childProcess.killed) {
+            childProcess.kill('SIGTERM');
             setTimeout(() => {
-              if (!process.killed) {
-                process.kill('SIGKILL');
+              if (!childProcess.killed) {
+                childProcess.kill('SIGKILL');
               }
             }, 5000);
           }
@@ -492,7 +492,7 @@ export class LocalExecutionManager {
           });
         }, timeout);
 
-        process.on('close', () => {
+        childProcess.on('close', () => {
           clearTimeout(timeoutHandle);
         });
 
