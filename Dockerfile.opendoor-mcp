@@ -1,0 +1,327 @@
+# Complete Multi-stage build for production-ready Opendoor MCP Server
+# This Dockerfile builds the entire MCP server with all tools, services, and capabilities
+
+FROM node:22-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files from mcp-server directory
+COPY mcp-server/package*.json ./
+
+# Install all dependencies (including dev dependencies for building)
+RUN npm ci
+
+# Copy entire MCP server source code
+COPY mcp-server/ .
+
+# Build the complete TypeScript application
+RUN npm run build
+
+# Verify build output
+RUN ls -la dist/ && echo "Build completed successfully"
+
+# Production stage with complete MCP server functionality
+FROM node:22-alpine AS production
+
+# Install comprehensive system dependencies for full MCP server functionality
+RUN apk add --no-cache \
+    # Docker and container management
+    docker-cli \
+    docker-compose \
+    # Redis for session management
+    redis \
+    # Process management
+    supervisor \
+    # Network and system tools
+    curl \
+    wget \
+    bash \
+    git \
+    openssh-client \
+    netcat-openbsd \
+    # Python ecosystem for code execution
+    python3 \
+    python3-dev \
+    py3-pip \
+    py3-setuptools \
+    py3-wheel \
+    # Build tools for native modules
+    gcc \
+    g++ \
+    make \
+    # System utilities
+    ca-certificates \
+    tzdata \
+    procps \
+    htop \
+    # Cleanup
+    && rm -rf /var/cache/apk/*
+
+# Install comprehensive Python packages for code execution capabilities
+RUN pip3 install --no-cache-dir --break-system-packages \
+    # Core scientific computing
+    numpy \
+    pandas \
+    matplotlib \
+    seaborn \
+    scipy \
+    scikit-learn \
+    # Web and API tools
+    requests \
+    httpx \
+    aiohttp \
+    fastapi \
+    flask \
+    # Data processing
+    beautifulsoup4 \
+    lxml \
+    openpyxl \
+    # Development tools
+    jupyter \
+    ipython \
+    pytest \
+    # Async and utilities
+    asyncio \
+    aiofiles \
+    pydantic \
+    # Database connectors
+    psycopg2-binary \
+    pymongo \
+    redis \
+    # Machine learning
+    torch \
+    transformers \
+    # Image processing
+    pillow \
+    opencv-python-headless
+
+# Create app user and groups with proper permissions
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs && \
+    addgroup nodejs docker && \
+    addgroup nodejs redis
+
+# Create comprehensive directory structure for MCP server
+RUN mkdir -p \
+    # Core application directories
+    /app \
+    /app/dist \
+    /app/src \
+    /app/logs \
+    # Session and container management
+    /app/sessions \
+    /app/containers \
+    /app/temp \
+    # Frontend and static files
+    /app/frontend \
+    /app/public \
+    # Configuration directories
+    /app/config \
+    /app/scripts \
+    # System directories
+    /var/log/supervisor \
+    /var/log/mcp \
+    /etc/supervisor/conf.d \
+    /etc/redis \
+    /var/run/redis \
+    /var/lib/redis \
+    # Temporary and cache directories
+    /tmp/mcp-sessions \
+    /tmp/mcp-containers \
+    /tmp/mcp-cache \
+    # User workspace
+    /home/nodejs/workspace \
+    && chown -R nodejs:nodejs \
+        /app \
+        /var/log/supervisor \
+        /var/log/mcp \
+        /var/run/redis \
+        /var/lib/redis \
+        /tmp/mcp-sessions \
+        /tmp/mcp-containers \
+        /tmp/mcp-cache \
+        /home/nodejs
+
+# Set working directory
+WORKDIR /app
+
+# Copy built application from builder stage
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+
+# Install only production dependencies in final stage
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy complete MCP server source code and components
+COPY --chown=nodejs:nodejs mcp-server/src ./src
+COPY --chown=nodejs:nodejs mcp-server/tsconfig.json ./
+COPY --chown=nodejs:nodejs mcp-server/README.md ./
+
+# Copy all container definitions for multi-language code execution
+COPY --chown=nodejs:nodejs containers/ ./containers/
+
+# Copy frontend for web interface
+COPY --chown=nodejs:nodejs frontend/ ./frontend/
+
+# Copy Docker configuration files
+COPY --chown=nodejs:nodejs mcp-server/docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY --chown=nodejs:nodejs mcp-server/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# Create comprehensive Redis configuration
+RUN echo "# Redis configuration for MCP Server" > /etc/redis/redis.conf && \
+    echo "bind 127.0.0.1" >> /etc/redis/redis.conf && \
+    echo "port 6379" >> /etc/redis/redis.conf && \
+    echo "daemonize no" >> /etc/redis/redis.conf && \
+    echo "supervised no" >> /etc/redis/redis.conf && \
+    echo "pidfile /var/run/redis/redis.pid" >> /etc/redis/redis.conf && \
+    echo "loglevel notice" >> /etc/redis/redis.conf && \
+    echo "logfile /var/log/redis/redis.log" >> /etc/redis/redis.conf && \
+    echo "databases 16" >> /etc/redis/redis.conf && \
+    echo "save 900 1" >> /etc/redis/redis.conf && \
+    echo "save 300 10" >> /etc/redis/redis.conf && \
+    echo "save 60 10000" >> /etc/redis/redis.conf && \
+    echo "stop-writes-on-bgsave-error yes" >> /etc/redis/redis.conf && \
+    echo "rdbcompression yes" >> /etc/redis/redis.conf && \
+    echo "rdbchecksum yes" >> /etc/redis/redis.conf && \
+    echo "dbfilename dump.rdb" >> /etc/redis/redis.conf && \
+    echo "dir /var/lib/redis" >> /etc/redis/redis.conf && \
+    echo "maxmemory 256mb" >> /etc/redis/redis.conf && \
+    echo "maxmemory-policy allkeys-lru" >> /etc/redis/redis.conf && \
+    echo "timeout 300" >> /etc/redis/redis.conf && \
+    echo "tcp-keepalive 300" >> /etc/redis/redis.conf
+
+# Create comprehensive supervisord configuration for all services
+RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
+    echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "user=root" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "pidfile=/var/run/supervisord.pid" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "childlogdir=/var/log/supervisor" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "[program:redis]" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "command=redis-server /etc/redis/redis.conf" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "user=nodejs" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stderr_logfile=/var/log/supervisor/redis.err.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stdout_logfile=/var/log/supervisor/redis.out.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "priority=100" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "startsecs=5" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "startretries=3" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "[program:mcp-server]" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "command=node dist/index.js" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "directory=/app" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "user=nodejs" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stderr_logfile=/var/log/supervisor/mcp-server.err.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stdout_logfile=/var/log/supervisor/mcp-server.out.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "environment=NODE_ENV=production,REDIS_URL=redis://localhost:6379" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "priority=300" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "startretries=3" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stopwaitsecs=30" >> /etc/supervisor/conf.d/supervisord.conf
+
+# Create health monitoring script
+RUN echo '#!/bin/bash' > /usr/local/bin/health-monitor.sh && \
+    echo '# Health monitoring script for MCP Server' >> /usr/local/bin/health-monitor.sh && \
+    echo 'while true; do' >> /usr/local/bin/health-monitor.sh && \
+    echo '    sleep 60' >> /usr/local/bin/health-monitor.sh && \
+    echo '    # Check MCP server health' >> /usr/local/bin/health-monitor.sh && \
+    echo '    if ! curl -f http://localhost:3000/health >/dev/null 2>&1; then' >> /usr/local/bin/health-monitor.sh && \
+    echo '        echo "$(date): MCP Server health check failed" >> /var/log/mcp/health.log' >> /usr/local/bin/health-monitor.sh && \
+    echo '    fi' >> /usr/local/bin/health-monitor.sh && \
+    echo '    # Check Redis health' >> /usr/local/bin/health-monitor.sh && \
+    echo '    if ! redis-cli -p 6379 ping >/dev/null 2>&1; then' >> /usr/local/bin/health-monitor.sh && \
+    echo '        echo "$(date): Redis health check failed" >> /var/log/mcp/health.log' >> /usr/local/bin/health-monitor.sh && \
+    echo '    fi' >> /usr/local/bin/health-monitor.sh && \
+    echo 'done' >> /usr/local/bin/health-monitor.sh
+
+# Make all scripts executable
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/health-monitor.sh
+
+# Create log files with proper permissions
+RUN touch /var/log/mcp/health.log /var/log/mcp/server.log && \
+    chown -R nodejs:nodejs /var/log/mcp
+
+# Expose all necessary ports
+EXPOSE 3000 3001 6379
+
+# Comprehensive health check for all services
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
+    CMD curl -f http://localhost:3000/health && \
+        redis-cli -p 6379 ping | grep -q PONG && \
+        pgrep -f "node dist/index.js" > /dev/null || exit 1
+
+# Comprehensive security and metadata labels
+LABEL org.opencontainers.image.title="Opendoor MCP Server - Complete Edition" \
+      org.opencontainers.image.description="Production-grade Model Context Protocol server with complete multi-language execution, VS Code integration, browser automation, container management, and all tools" \
+      org.opencontainers.image.version="2.0.0" \
+      org.opencontainers.image.authors="Opendoor Team" \
+      org.opencontainers.image.url="https://github.com/openhands-mentat-cli/Opendoor" \
+      org.opencontainers.image.source="https://github.com/openhands-mentat-cli/Opendoor" \
+      org.opencontainers.image.documentation="https://github.com/openhands-mentat-cli/Opendoor/blob/main/README.md" \
+      org.opencontainers.image.vendor="Opendoor Team" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.ref.name="opendoor-mcp-complete" \
+      org.label-schema.schema-version="1.0" \
+      org.label-schema.vcs-url="https://github.com/openhands-mentat-cli/Opendoor.git" \
+      maintainer="Opendoor Team <team@opendoor.dev>" \
+      org.opencontainers.image.features="mcp,code-execution,vscode,playwright,containers,redis,python,nodejs,docker"
+
+# Switch to non-root user for security
+USER nodejs
+
+# Set comprehensive environment variables for complete MCP server
+ENV NODE_ENV=production \
+    MCP_TRANSPORT=sse \
+    HOST=0.0.0.0 \
+    PORT=3000 \
+    WEB_PORT=3001 \
+    REDIS_URL=redis://localhost:6379 \
+    REDIS_HOST=localhost \
+    REDIS_PORT=6379 \
+    LOG_LEVEL=info \
+    SESSION_TIMEOUT=3600 \
+    MAX_SESSIONS=10 \
+    CONTAINER_TIMEOUT=1800 \
+    SECURITY_ENABLED=true \
+    RATE_LIMIT_ENABLED=true \
+    HEALTH_CHECK_INTERVAL=30 \
+    DOCKER_HOST=unix:///var/run/docker.sock \
+    PYTHONPATH=/usr/lib/python3.11/site-packages \
+    PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin \
+    # MCP Server specific settings
+    MCP_SERVER_NAME="Opendoor MCP Server" \
+    MCP_SERVER_VERSION="2.0.0" \
+    MCP_TOOLS_ENABLED="execute_code,create_vscode_session,create_playwright_session,manage_sessions,system_health" \
+    MCP_RESOURCES_ENABLED="system_config,usage_guide" \
+    MCP_PROMPTS_ENABLED="usage_guide" \
+    # Security settings
+    ALLOWED_ORIGINS="*" \
+    CORS_ENABLED=true \
+    HELMET_ENABLED=true \
+    # Performance settings
+    NODE_OPTIONS="--max-old-space-size=2048" \
+    UV_THREADPOOL_SIZE=4
+
+# Create startup script that initializes everything
+RUN echo '#!/bin/bash' > /app/startup.sh && \
+    echo 'echo "🚀 Starting Opendoor MCP Server Complete Edition..."' >> /app/startup.sh && \
+    echo 'echo "📊 System Information:"' >> /app/startup.sh && \
+    echo 'echo "  - Node.js: $(node --version)"' >> /app/startup.sh && \
+    echo 'echo "  - Python: $(python3 --version)"' >> /app/startup.sh && \
+    echo 'echo "  - Available Tools: $MCP_TOOLS_ENABLED"' >> /app/startup.sh && \
+    echo 'echo "  - Transport: $MCP_TRANSPORT"' >> /app/startup.sh && \
+    echo 'echo "  - Port: $PORT"' >> /app/startup.sh && \
+    echo 'echo ""' >> /app/startup.sh && \
+    echo 'echo "🔧 Initializing services..."' >> /app/startup.sh && \
+    echo 'exec /usr/local/bin/entrypoint.sh' >> /app/startup.sh
+
+RUN chmod +x /app/startup.sh
+
+# Start the complete MCP server with all services
+ENTRYPOINT ["/app/startup.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

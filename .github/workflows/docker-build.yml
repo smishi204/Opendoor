@@ -1,0 +1,208 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'mcp-server/**'
+      - 'Dockerfile.opendoor-mcp'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'mcp-server/**'
+      - 'Dockerfile.opendoor-mcp'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - name: opendoor-mcp
+            dockerfile: Dockerfile.opendoor-mcp
+            context: .
+            description: "Complete Opendoor MCP Server with all tools, services, and multi-language execution capabilities"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Opendoor MCP Server
+            org.opencontainers.image.description=${{ matrix.component.description }}
+            org.opencontainers.image.vendor=Opendoor Team
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          load: ${{ github.event_name == 'pull_request' }}
+        timeout-minutes: 45
+
+      - name: Test Complete MCP Server
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "🧪 Testing Complete Opendoor MCP Server..."
+          
+          # Get the image name for testing
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}:latest"
+          
+          # Start container in background with comprehensive setup
+          docker run --rm -d --name test-mcp-${{ github.run_id }} \
+            -p 3000:3000 \
+            -p 3001:3001 \
+            -p 6379:6379 \
+            -e MCP_TRANSPORT=sse \
+            -e NODE_ENV=production \
+            -e LOG_LEVEL=debug \
+            -e REDIS_URL=redis://localhost:6379 \
+            --health-cmd="curl -f http://localhost:3000/health && redis-cli -p 6379 ping | grep -q PONG || exit 1" \
+            --health-interval=15s \
+            --health-timeout=10s \
+            --health-retries=5 \
+            --health-start-period=90s \
+            "${IMAGE_TAG}"
+          
+          # Wait for container to be healthy with extended timeout
+          echo "⏳ Waiting for complete MCP server to be healthy..."
+          for i in {1..60}; do
+            HEALTH_STATUS=$(docker inspect test-mcp-${{ github.run_id }} --format='{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+            if [ "$HEALTH_STATUS" = "healthy" ]; then
+              echo "✅ Complete MCP Server is healthy!"
+              break
+            elif [ "$HEALTH_STATUS" = "unhealthy" ]; then
+              echo "❌ Container is unhealthy"
+              echo "📋 Container logs:"
+              docker logs test-mcp-${{ github.run_id }} --tail 50
+              docker stop test-mcp-${{ github.run_id }}
+              exit 1
+            elif [ $i -eq 60 ]; then
+              echo "❌ Container failed to become healthy after 60 attempts (15 minutes)"
+              echo "📋 Container logs:"
+              docker logs test-mcp-${{ github.run_id }} --tail 50
+              docker stop test-mcp-${{ github.run_id }}
+              exit 1
+            fi
+            if [ $((i % 10)) -eq 0 ]; then
+              echo "   Still waiting... ($i/60) Status: $HEALTH_STATUS"
+              echo "   Recent logs:"
+              docker logs test-mcp-${{ github.run_id }} --tail 5
+            fi
+            sleep 15
+          done
+          
+          # Test all endpoints
+          echo "🔍 Testing MCP Server endpoints..."
+          
+          # Test health endpoint
+          if curl -f http://localhost:3000/health; then
+            echo "✅ Health endpoint test passed!"
+            curl -s http://localhost:3000/health | jq '.' || echo "Health response received"
+          else
+            echo "❌ Health endpoint test failed"
+            docker logs test-mcp-${{ github.run_id }} --tail 30
+            docker stop test-mcp-${{ github.run_id }}
+            exit 1
+          fi
+          
+          # Test Redis connection
+          echo "🔍 Testing Redis connection..."
+          if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
+            echo "✅ Redis connection test passed!"
+          else
+            echo "❌ Redis connection test failed"
+            docker logs test-mcp-${{ github.run_id }} --tail 30
+            docker stop test-mcp-${{ github.run_id }}
+            exit 1
+          fi
+          
+          # Test web interface (if available)
+          echo "🌐 Testing web interface..."
+          if curl -f http://localhost:3001/ >/dev/null 2>&1; then
+            echo "✅ Web interface is accessible"
+          else
+            echo "⚠️  Web interface not accessible (may be normal)"
+          fi
+          
+          # Show comprehensive container information
+          echo "📊 Container Information:"
+          echo "Image: ${IMAGE_TAG}"
+          echo "Status: $(docker inspect test-mcp-${{ github.run_id }} --format='{{.State.Status}}')"
+          echo "Health: $(docker inspect test-mcp-${{ github.run_id }} --format='{{.State.Health.Status}}')"
+          echo "Uptime: $(docker inspect test-mcp-${{ github.run_id }} --format='{{.State.StartedAt}}')"
+          
+          # Show final logs
+          echo "📋 Final container logs (last 30 lines):"
+          docker logs test-mcp-${{ github.run_id }} --tail 30
+          
+          # Cleanup
+          echo "🧹 Cleaning up..."
+          docker stop test-mcp-${{ github.run_id }}
+          
+          echo "✅ Complete MCP Server test passed!"
+
+  build-complete:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Summary
+        run: |
+          echo "🎉 Opendoor MCP Docker image built and pushed successfully!"
+          echo ""
+          echo "📦 Available images:"
+          echo "- ghcr.io/${{ github.repository }}/opendoor-mcp:latest"
+          echo "- ghcr.io/${{ github.repository }}/opendoor-mcp:${{ github.ref_name }}"
+          echo ""
+          echo "🚀 Complete MCP Server Features:"
+          echo "• Model Context Protocol server with SSE and STDIO support"
+          echo "• Multi-language code execution (Python, JavaScript, TypeScript, Bash)"
+          echo "• VS Code integration for development environments"
+          echo "• Playwright browser automation"
+          echo "• Redis for session management"
+          echo "• Built-in security and rate limiting"
+          echo "• Health monitoring and logging"
+          echo ""
+          echo "🔗 Quick start:"
+          echo "docker run -d -p 3000:3000 -p 3001:3001 \\"
+          echo "  -v /var/run/docker.sock:/var/run/docker.sock \\"
+          echo "  ghcr.io/${{ github.repository }}/opendoor-mcp:latest"
+          echo ""
+          echo "📚 Documentation: http://localhost:3001"
