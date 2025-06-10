@@ -130,7 +130,8 @@ ${endpoints}
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Destroy the session
+    // Destroy the session in both managers
+    await globalServices!.containerManager.destroySession(sessionId);
     await globalServices!.sessionManager.destroySession(sessionId);
 
     return this.createSuccessResponse({
