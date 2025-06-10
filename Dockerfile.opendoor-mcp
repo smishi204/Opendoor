@@ -1,5 +1,5 @@
-# Complete Multi-stage build for production-ready Opendoor MCP Server
-# This Dockerfile builds the entire MCP server with all tools, services, and capabilities
+# Multi-stage build for Opendoor MCP Server with Local Execution
+# This Dockerfile builds the MCP server with local virtual environment execution
 
 FROM node:22-alpine AS builder
 
@@ -21,14 +21,11 @@ RUN npm run build
 # Verify build output
 RUN ls -la dist/ && echo "Build completed successfully"
 
-# Production stage with complete MCP server functionality
+# Production stage with local execution capabilities
 FROM node:22-alpine AS production
 
-# Install comprehensive system dependencies for full MCP server functionality
+# Install system dependencies for local execution environment
 RUN apk add --no-cache \
-    # Docker and container management
-    docker-cli \
-    docker-compose \
     # Redis for session management
     redis \
     # Process management
@@ -46,17 +43,33 @@ RUN apk add --no-cache \
     py3-pip \
     py3-setuptools \
     py3-wheel \
-    # Build tools for native modules
+    # Build tools for native modules and language support
     gcc \
     g++ \
     make \
+    # Java support
+    openjdk17-jdk \
+    # Go support
+    go \
+    # Rust support (will be installed later)
+    # TypeScript/Node.js already available
     # System utilities
     ca-certificates \
     tzdata \
     procps \
     htop \
+    # VS Code Server dependencies
+    libc6-compat \
+    libstdc++ \
     # Cleanup
     && rm -rf /var/cache/apk/*
+
+# Install Rust manually
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    echo 'source ~/.cargo/env' >> ~/.bashrc
+
+# Install code-server for VS Code functionality
+RUN wget -O- https://aka.ms/install-vscode-server/setup.sh | sh
 
 # Install comprehensive Python packages for code execution capabilities
 RUN pip3 install --no-cache-dir --break-system-packages \
@@ -89,17 +102,15 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     psycopg2-binary \
     pymongo \
     redis \
-    # Machine learning
-    torch \
-    transformers \
+    # Machine learning (lighter versions for Alpine)
+    # torch \
+    # transformers \
     # Image processing
-    pillow \
-    opencv-python-headless
+    pillow
 
 # Create app user and groups with proper permissions
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 -G nodejs && \
-    addgroup nodejs docker && \
     addgroup nodejs redis
 
 # Create comprehensive directory structure for MCP server
@@ -109,9 +120,9 @@ RUN mkdir -p \
     /app/dist \
     /app/src \
     /app/logs \
-    # Session and container management
+    # Session and virtual environment management
     /app/sessions \
-    /app/containers \
+    /app/venvs \
     /app/temp \
     # Frontend and static files
     /app/frontend \
@@ -128,7 +139,6 @@ RUN mkdir -p \
     /var/lib/redis \
     # Temporary and cache directories
     /tmp/mcp-sessions \
-    /tmp/mcp-containers \
     /tmp/mcp-cache \
     # User workspace
     /home/nodejs/workspace \
@@ -139,7 +149,6 @@ RUN mkdir -p \
         /var/run/redis \
         /var/lib/redis \
         /tmp/mcp-sessions \
-        /tmp/mcp-containers \
         /tmp/mcp-cache \
         /home/nodejs
 
@@ -158,8 +167,8 @@ COPY --chown=nodejs:nodejs mcp-server/src ./src
 COPY --chown=nodejs:nodejs mcp-server/tsconfig.json ./
 COPY --chown=nodejs:nodejs mcp-server/README.md ./
 
-# Copy all container definitions for multi-language code execution
-COPY --chown=nodejs:nodejs containers/ ./containers/
+# Copy language configuration (no longer need container definitions)
+# COPY --chown=nodejs:nodejs containers/ ./containers/
 
 # Copy frontend for web interface
 COPY --chown=nodejs:nodejs frontend/ ./frontend/
@@ -274,7 +283,7 @@ LABEL org.opencontainers.image.title="Opendoor MCP Server - Complete Edition" \
 # Switch to non-root user for security
 USER nodejs
 
-# Set comprehensive environment variables for complete MCP server
+# Set comprehensive environment variables for local execution MCP server
 ENV NODE_ENV=production \
     MCP_TRANSPORT=sse \
     HOST=0.0.0.0 \
@@ -286,15 +295,16 @@ ENV NODE_ENV=production \
     LOG_LEVEL=info \
     SESSION_TIMEOUT=3600 \
     MAX_SESSIONS=10 \
-    CONTAINER_TIMEOUT=1800 \
+    SESSION_TIMEOUT=1800 \
     SECURITY_ENABLED=true \
     RATE_LIMIT_ENABLED=true \
     HEALTH_CHECK_INTERVAL=30 \
-    DOCKER_HOST=unix:///var/run/docker.sock \
     PYTHONPATH=/usr/lib/python3.11/site-packages \
-    PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin \
+    PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin:/root/.cargo/bin \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk \
+    GOPATH=/usr/local/go \
     # MCP Server specific settings
-    MCP_SERVER_NAME="Opendoor MCP Server" \
+    MCP_SERVER_NAME="Opendoor MCP Server - Local Execution" \
     MCP_SERVER_VERSION="2.0.0" \
     MCP_TOOLS_ENABLED="execute_code,create_vscode_session,create_playwright_session,manage_sessions,system_health" \
     MCP_RESOURCES_ENABLED="system_config,usage_guide" \

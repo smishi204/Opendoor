@@ -54,6 +54,9 @@ export default class CreateVSCodeSessionTool extends MCPTool<CreateVSCodeSession
         template
       });
 
+      // Create the VS Code session in the local manager
+      await globalServices.containerManager.createVSCodeSession(session.id, language);
+
       // Get VS Code URL
       const vscodeUrl = await globalServices.containerManager.getVSCodeUrl(session.id);
 

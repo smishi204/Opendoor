@@ -68,6 +68,9 @@ export default class ExecuteCodeTool extends MCPTool<ExecuteCodeInput> {
         });
         actualSessionId = session.id;
         isTemporarySession = true;
+        
+        // Create the execution session in the local manager
+        await globalServices.containerManager.createExecutionSession(actualSessionId, language);
       }
 
       // Execute the code
@@ -81,6 +84,7 @@ export default class ExecuteCodeTool extends MCPTool<ExecuteCodeInput> {
       // Clean up temporary session
       if (isTemporarySession && actualSessionId) {
         try {
+          await globalServices.containerManager.destroySession(actualSessionId);
           await globalServices.sessionManager.destroySession(actualSessionId);
         } catch (cleanupError) {
           // Log but don't fail the execution

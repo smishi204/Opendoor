@@ -34,7 +34,6 @@ railway up
 # Pull and run the latest version
 docker run -d --name opendoor-mcp \
   -p 3000:3000 -p 3001:3001 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
   -e MCP_TRANSPORT=sse \
   ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
 
@@ -79,7 +78,6 @@ docker-compose -f docker-compose.production.yml up -d
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "/var/run/docker.sock:/var/run/docker.sock",
         "ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest"
       ]
     }
@@ -106,15 +104,15 @@ docker-compose -f docker-compose.production.yml up -d
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   LLM Client    │    │   MCP Server    │    │   Containers    │
+│   LLM Client    │    │   MCP Server    │    │ Local Execution │
 │                 │    │                 │    │                 │
 │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │ Claude/GPT  │◄┼────┼►│ Opendoor    │◄┼────┼►│ Code Exec   │ │
-│ │ Desktop     │ │    │ │ MCP Server  │ │    │ │ VS Code     │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ │ Playwright  │ │
-│                 │    │                 │    │ └─────────────┘ │
-│ SSE/STDIO       │    │ Redis Session   │    │ Docker-in-      │
-│ Transport       │    │ Management      │    │ Docker          │
+│ │ Claude/GPT  │◄┼────┼►│ Opendoor    │◄┼────┼►│ Python Venv │ │
+│ │ Desktop     │ │    │ │ MCP Server  │ │    │ │ Node.js     │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ │ Java/Go/Rust│ │
+│                 │    │                 │    │ │ Code Server │ │
+│ SSE/STDIO       │    │ Redis Session   │    │ │ Playwright  │ │
+│ Transport       │    │ Management      │    │ └─────────────┘ │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 

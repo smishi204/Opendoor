@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { Logger } from './utils/Logger.js';
 import { ConfigService } from './services/ConfigService.js';
 import { SessionManager } from './session/SessionManager.js';
-import { ContainerManager } from './container/ContainerManager.js';
+import { LocalExecutionManager } from './container/LocalExecutionManager.js';
 import { SecurityManager } from './security/SecurityManager.js';
 import { HealthService } from './services/HealthService.js';
 
@@ -22,7 +22,7 @@ const logger = Logger.getInstance();
 // Global services that will be injected into tools
 export let globalServices: {
   sessionManager: SessionManager;
-  containerManager: ContainerManager;
+  containerManager: LocalExecutionManager;
   securityManager: SecurityManager;
   configService: ConfigService;
   healthService: HealthService;
@@ -71,7 +71,6 @@ async function startWebInterface(port: number) {
           command: "docker",
           args: [
             "run", "-i", "--rm",
-            "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest"
           ]
         }
@@ -112,7 +111,6 @@ function generateDocumentationHTML(baseUrl: string, mcpPort: number): string {
         command: "docker",
         args: [
           "run", "-i", "--rm",
-          "-v", "/var/run/docker.sock:/var/run/docker.sock",
           "ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest"
         ]
       }
@@ -199,13 +197,11 @@ docker pull ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
 
 # Run with STDIO transport
 docker run -i --rm \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
   ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
 
 # Run with SSE transport
 docker run -d --rm \\
   -p 3000:3000 -p 3001:3001 \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
   -e MCP_TRANSPORT=sse \\
   ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
         </pre>
@@ -272,7 +268,7 @@ async function initializeServices() {
     ] = await Promise.all([
       Promise.resolve(new ConfigService()),
       new SessionManager().initialize(),
-      new ContainerManager().initialize(),
+      new LocalExecutionManager().initialize(),
       Promise.resolve(new SecurityManager()),
       Promise.resolve(new HealthService())
     ]);
