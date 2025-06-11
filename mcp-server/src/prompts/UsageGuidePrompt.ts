@@ -1,60 +1,69 @@
-import { MCPPrompt } from '@ronangrant/mcp-framework';
 import { z } from 'zod';
 
-interface UsageGuideInput {
-  topic?: string;
-  language?: string;
-}
+const UsageGuideSchema = z.object({
+  topic: z.enum(['overview', 'code_execution', 'vscode', 'playwright', 'sessions', 'security']).optional(),
+  language: z.string().optional()
+});
 
-export default class UsageGuidePrompt extends MCPPrompt<UsageGuideInput> {
-  name = "usage_guide";
-  description = "Get comprehensive usage instructions for the Opendoor MCP Server";
+type UsageGuideInput = z.infer<typeof UsageGuideSchema>;
 
-  protected schema = {
-    topic: {
-      type: z.enum(['overview', 'code_execution', 'vscode', 'playwright', 'sessions', 'security']).optional(),
-      description: "Specific topic to get guidance on (default: overview)"
-    },
-    language: {
-      type: z.string().optional(),
-      description: "Programming language for language-specific examples"
-    }
-  };
+export const usageGuidePrompt = {
+  definition: {
+    name: "usage_guide",
+    description: "Get comprehensive usage instructions for the Opendoor MCP Server",
+    arguments: [
+      {
+        name: "topic",
+        description: "Specific topic to get guidance on (default: overview)",
+        required: false
+      },
+      {
+        name: "language", 
+        description: "Programming language for language-specific examples",
+        required: false
+      }
+    ]
+  },
 
-  async generateMessages(args: UsageGuideInput) {
-    const { topic = 'overview', language = 'python' } = args;
+  async execute(input: unknown) {
+    // Validate input
+    const validInput = UsageGuideSchema.parse(input);
+    const { topic = 'overview', language = 'python' } = validInput;
 
     const guides = {
-      overview: this.getOverviewGuide(),
-      code_execution: this.getCodeExecutionGuide(language),
-      vscode: this.getVSCodeGuide(language),
-      playwright: this.getPlaywrightGuide(),
-      sessions: this.getSessionGuide(),
-      security: this.getSecurityGuide()
+      overview: getOverviewGuide(),
+      code_execution: getCodeExecutionGuide(language),
+      vscode: getVSCodeGuide(language),
+      playwright: getPlaywrightGuide(),
+      sessions: getSessionGuide(),
+      security: getSecurityGuide()
     };
 
     const guide = guides[topic as keyof typeof guides] || guides.overview;
 
-    return [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: `Please provide a comprehensive guide for: ${topic}`
+    return {
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Please provide a comprehensive guide for: ${topic}`
+          }
+        },
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: guide
+          }
         }
-      },
-      {
-        role: "assistant",
-        content: {
-          type: "text",
-          text: guide
-        }
-      }
-    ];
+      ]
+    };
   }
+};
 
-  private getOverviewGuide(): string {
-    return `# Opendoor MCP Server - Complete Usage Guide
+function getOverviewGuide(): string {
+  return `# Opendoor MCP Server - Complete Usage Guide
 
 ## Overview
 The Opendoor MCP Server is a production-ready Model Context Protocol server that provides isolated, containerized development environments with support for multiple programming languages, VS Code integration, and browser automation.
@@ -89,22 +98,22 @@ Python, JavaScript, TypeScript, Java, C, C++, C#, Rust, Go, PHP, Perl, Ruby, Lua
 - Explore browser automation with \`create_playwright_session\`
 
 For specific guidance, ask for help with topics: code_execution, vscode, playwright, sessions, or security.`;
-  }
+}
 
-  private getCodeExecutionGuide(language: string): string {
-    const examples = {
-      python: `# Python example
+function getCodeExecutionGuide(language: string): string {
+  const examples = {
+    python: `# Python example
 print("Hello from Python!")
 import requests
 response = requests.get("https://httpbin.org/json")
 print(response.json())`,
-      
-      javascript: `// JavaScript example
+    
+    javascript: `// JavaScript example
 console.log("Hello from JavaScript!");
 import fs from 'fs';
 console.log("Current directory:", process.cwd());`,
-      
-      typescript: `// TypeScript example
+    
+    typescript: `// TypeScript example
 interface User {
   name: string;
   age: number;
@@ -112,16 +121,16 @@ interface User {
 
 const user: User = { name: "Alice", age: 30 };
 console.log(\`Hello \${user.name}, you are \${user.age} years old!\`);`,
-      
-      java: `// Java example
+    
+    java: `// Java example
 public class HelloWorld {
     public static void main(String[] args) {
         System.out.println("Hello from Java!");
         System.out.println("Java version: " + System.getProperty("java.version"));
     }
 }`,
-      
-      go: `// Go example
+    
+    go: `// Go example
 package main
 
 import (
@@ -133,11 +142,11 @@ func main() {
     fmt.Println("Hello from Go!")
     fmt.Printf("Go version: %s\\n", runtime.Version())
 }`
-    };
+  };
 
-    const example = examples[language as keyof typeof examples] || examples.python;
+  const example = examples[language as keyof typeof examples] || examples.python;
 
-    return `# Code Execution Guide
+  return `# Code Execution Guide
 
 ## Overview
 The \`execute_code\` tool allows you to run code in isolated, secure containers with support for 15+ programming languages.
@@ -183,10 +192,10 @@ ${example}
 - Verify language-specific requirements
 - Use shorter timeouts for testing
 - Check session status if using persistent sessions`;
-  }
+}
 
-  private getVSCodeGuide(language: string): string {
-    return `# VS Code Development Environment Guide
+function getVSCodeGuide(language: string): string {
+  return `# VS Code Development Environment Guide
 
 ## Overview
 Create full-featured VS Code development environments running in isolated containers with language-specific tooling and extensions.
@@ -250,10 +259,10 @@ Create full-featured VS Code development environments running in isolated contai
 - Use \`manage_sessions\` to track active sessions
 - Clean up unused sessions to free resources
 - Sessions include all installed packages and files`;
-  }
+}
 
-  private getPlaywrightGuide(): string {
-    return `# Playwright Browser Automation Guide
+function getPlaywrightGuide(): string {
+  return `# Playwright Browser Automation Guide
 
 ## Overview
 Create browser automation environments with Playwright for web testing, scraping, and UI automation.
@@ -346,10 +355,10 @@ console.log('Top headlines:', headlines.slice(0, 5));
 - Cookies and storage maintained
 - Multiple pages supported
 - Clean up sessions when done`;
-  }
+}
 
-  private getSessionGuide(): string {
-    return `# Session Management Guide
+function getSessionGuide(): string {
+  return `# Session Management Guide
 
 ## Overview
 Sessions provide persistent, isolated environments for development work. Each session runs in its own container with dedicated resources.
@@ -426,10 +435,10 @@ Sessions provide persistent, isolated environments for development work. Each se
 - Failed sessions are automatically removed
 - Resource limits are enforced
 - Cleanup runs periodically`;
-  }
+}
 
-  private getSecurityGuide(): string {
-    return `# Security Guide
+function getSecurityGuide(): string {
+  return `# Security Guide
 
 ## Overview
 The Opendoor MCP Server implements multiple layers of security to ensure safe code execution and system protection.
@@ -518,5 +527,4 @@ The Opendoor MCP Server implements multiple layers of security to ensure safe co
 - Include reproduction steps
 - Respect responsible disclosure
 - Follow up on resolution`;
-  }
 }
