@@ -1,70 +1,165 @@
 #!/usr/bin/env node
 
-import { MCPServer } from '@ronangrant/mcp-framework';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import express, { Request, Response } from 'express';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { Logger } from './utils/Logger.js';
 import { ConfigService } from './services/ConfigService.js';
 import { SessionManager } from './session/SessionManager.js';
 import { LocalExecutionManager } from './container/LocalExecutionManager.js';
 import { SecurityManager } from './security/SecurityManager.js';
 import { HealthService } from './services/HealthService.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { executeCodeTool } from './tools/ExecuteCodeTool.js';
+import { createVSCodeSessionTool } from './tools/CreateVSCodeSessionTool.js';
+import { createPlaywrightSessionTool } from './tools/CreatePlaywrightSessionTool.js';
+import { manageSessionsTool } from './tools/ManageSessionsTool.js';
+import { systemHealthTool } from './tools/SystemHealthTool.js';
 
 const logger = Logger.getInstance();
 
-// Global services that will be injected into tools
-export let globalServices: {
+// Service dependencies container
+export interface ServiceContainer {
   sessionManager: SessionManager;
-  containerManager: LocalExecutionManager;
+  executionManager: LocalExecutionManager;
   securityManager: SecurityManager;
   configService: ConfigService;
   healthService: HealthService;
-} | null = null;
+}
 
-// Web interface for documentation and configuration
-async function startWebInterface(port: number) {
+let services: ServiceContainer | null = null;
+
+async function initializeServices(): Promise<ServiceContainer> {
+  const startTime = Date.now();
+  logger.info('🚀 Starting Opendoor MCP Server initialization...');
+
+  try {
+    // Initialize services in parallel for faster boot time
+    const [
+      configService,
+      sessionManager,
+      executionManager,
+      securityManager,
+      healthService
+    ] = await Promise.all([
+      Promise.resolve(new ConfigService()),
+      new SessionManager().initialize(),
+      new LocalExecutionManager().initialize(),
+      Promise.resolve(new SecurityManager()),
+      Promise.resolve(new HealthService())
+    ]);
+
+    const bootTime = Date.now() - startTime;
+    logger.info(`✅ Services initialized in ${bootTime}ms`);
+
+    return {
+      configService,
+      sessionManager,
+      executionManager,
+      securityManager,
+      healthService
+    };
+  } catch (error) {
+    logger.error('❌ Failed to initialize services:', error);
+    throw error;
+  }
+}
+
+function createServer(): Server {
+  const server = new Server(
+    {
+      name: 'opendoor-mcp-server',
+      version: '2.0.0',
+    },
+    {
+      capabilities: {
+        tools: {},
+        prompts: {},
+        resources: {
+          subscribe: false,
+          listChanged: false
+        }
+      },
+    }
+  );
+
+  // Tool handlers
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: [
+        executeCodeTool.definition,
+        createVSCodeSessionTool.definition,
+        createPlaywrightSessionTool.definition,
+        manageSessionsTool.definition,
+        systemHealthTool.definition
+      ]
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    if (!services) {
+      throw new Error('Services not initialized');
+    }
+
+    const { name, arguments: args } = request.params;
+
+    switch (name) {
+      case 'execute_code':
+        return await executeCodeTool.execute(args, services);
+      
+      case 'create_vscode_session':
+        return await createVSCodeSessionTool.execute(args, services);
+      
+      case 'create_playwright_session':
+        return await createPlaywrightSessionTool.execute(args, services);
+      
+      case 'manage_sessions':
+        return await manageSessionsTool.execute(args, services);
+      
+      case 'system_health':
+        return await systemHealthTool.execute(args, services);
+      
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  });
+
+  // Note: Prompt and Resource handlers would be added here when supported by the MCP SDK
+  // For now, we focus on the core tool functionality
+
+  return server;
+}
+
+async function startWebInterface(port: number): Promise<void> {
   const app = express();
   
   app.use(cors());
   app.use(express.json());
 
   // Health endpoint
-  app.get('/health', (req: Request, res: Response) => {
-    res.json({ 
-      status: 'healthy', 
-      timestamp: new Date().toISOString(),
-      services: globalServices ? {
-        sessionManager: 'ready',
-        containerManager: 'ready',
-        healthService: 'ready'
-      } : {}
-    });
+  app.get('/health', async (req, res) => {
+    try {
+      const healthStatus = services ? await services.healthService.getHealthStatus() : null;
+      res.json({ 
+        status: healthStatus?.status || 'initializing', 
+        timestamp: new Date().toISOString(),
+        services: services ? {
+          sessionManager: 'ready',
+          executionManager: 'ready',
+          healthService: 'ready'
+        } : {}
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 
   // MCP configuration endpoints
-  app.get('/config/sse', (req: Request, res: Response) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`.replace(`:${port}`, `:${port - 1}`);
-    res.json({
-      mcpServers: {
-        "opendoor": {
-          command: "npx",
-          args: ["-y", "@modelcontextprotocol/server-everything"],
-          env: {
-            MCP_SERVER_URL: `${baseUrl}/sse`
-          }
-        }
-      }
-    });
-  });
-
-  app.get('/config/stdio', (req: Request, res: Response) => {
+  app.get('/config/stdio', (req, res) => {
     res.json({
       mcpServers: {
         "opendoor": {
@@ -79,9 +174,9 @@ async function startWebInterface(port: number) {
   });
 
   // Documentation page
-  app.get('/', (req: Request, res: Response) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`.replace(`:${port}`, `:${port - 1}`);
-    res.send(generateDocumentationHTML(baseUrl, port - 1));
+  app.get('/', (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.send(generateDocumentationHTML(baseUrl));
   });
 
   return new Promise<void>((resolve) => {
@@ -92,19 +187,7 @@ async function startWebInterface(port: number) {
   });
 }
 
-function generateDocumentationHTML(baseUrl: string, mcpPort: number): string {
-  const sseConfig = {
-    mcpServers: {
-      "opendoor": {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-everything"],
-        env: {
-          MCP_SERVER_URL: `${baseUrl}/sse`
-        }
-      }
-    }
-  };
-
+function generateDocumentationHTML(baseUrl: string): string {
   const stdioConfig = {
     mcpServers: {
       "opendoor": {
@@ -144,18 +227,8 @@ function generateDocumentationHTML(baseUrl: string, mcpPort: number): string {
         <h1>🚪 Opendoor MCP Server</h1>
         <p><span class="status healthy">● RUNNING</span> Production-grade Model Context Protocol server</p>
         
-        <h2>🔗 Connection Configurations</h2>
+        <h2>🔗 Connection Configuration</h2>
         
-        <div class="config-section">
-            <h3>📡 SSE (Server-Sent Events) Configuration</h3>
-            <p>For web-based LLM clients and development:</p>
-            <pre id="sse-config">${JSON.stringify(sseConfig, null, 2)}</pre>
-            <button class="copy-btn" onclick="copyToClipboard('sse-config')">Copy SSE Config</button>
-            <div class="endpoint">
-                <strong>Endpoint:</strong> <code>${baseUrl}/sse</code>
-            </div>
-        </div>
-
         <div class="config-section">
             <h3>📟 STDIO Configuration</h3>
             <p>For command-line clients and production deployments:</p>
@@ -165,7 +238,7 @@ function generateDocumentationHTML(baseUrl: string, mcpPort: number): string {
 
         <h2>🛠️ Available Tools</h2>
         <div class="feature">
-            <strong>execute_code</strong> - Execute code in multiple languages (Python, JavaScript, TypeScript, Bash, etc.)
+            <strong>execute_code</strong> - Execute code in multiple languages with isolated environments
         </div>
         <div class="feature">
             <strong>create_vscode_session</strong> - Launch VS Code development environments
@@ -198,19 +271,11 @@ docker pull ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
 # Run with STDIO transport
 docker run -i --rm \\
   ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
-
-# Run with SSE transport
-docker run -d --rm \\
-  -p 3000:3000 -p 3001:3001 \\
-  -e MCP_TRANSPORT=sse \\
-  ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
         </pre>
 
         <h2>🔍 API Endpoints</h2>
         <div class="endpoint">GET /health - Server health status</div>
-        <div class="endpoint">GET /config/sse - SSE configuration JSON</div>
         <div class="endpoint">GET /config/stdio - STDIO configuration JSON</div>
-        <div class="endpoint">GET /sse - MCP SSE endpoint</div>
 
         <h2>📊 System Status</h2>
         <div id="status">Loading...</div>
@@ -229,7 +294,7 @@ docker run -d --rm \\
                     btn.textContent = originalText;
                     btn.style.background = '#3498db';
                 }, 2000);
-            }, 2000);
+            });
         }
 
         // Load system status
@@ -253,87 +318,27 @@ docker run -d --rm \\
   `;
 }
 
-async function initializeServices() {
-  const startTime = Date.now();
-  logger.info('🚀 Starting Opendoor MCP Server initialization...');
-
-  try {
-    // Initialize services in parallel for faster boot time
-    const [
-      configService,
-      sessionManager,
-      containerManager,
-      securityManager,
-      healthService
-    ] = await Promise.all([
-      Promise.resolve(new ConfigService()),
-      new SessionManager().initialize(),
-      new LocalExecutionManager().initialize(),
-      Promise.resolve(new SecurityManager()),
-      Promise.resolve(new HealthService())
-    ]);
-
-    const bootTime = Date.now() - startTime;
-    logger.info(`✅ Services initialized in ${bootTime}ms`);
-
-    globalServices = {
-      configService,
-      sessionManager,
-      containerManager,
-      securityManager,
-      healthService
-    };
-
-    return globalServices;
-  } catch (error) {
-    logger.error('❌ Failed to initialize services:', error);
-    throw error;
-  }
-}
-
-async function main() {
+async function main(): Promise<void> {
   try {
     // Initialize services first
-    await initializeServices();
+    services = await initializeServices();
 
-    // Determine transport type from environment
-    const useSSE = process.env.MCP_TRANSPORT === 'sse' || process.env.NODE_ENV === 'production';
-    const port = parseInt(process.env.PORT || '3000');
-
-    // Create MCP server with appropriate transport
-    const server = new MCPServer({
-      name: "opendoor-mcp-server",
-      version: "2.0.0",
-      transport: useSSE ? {
-        type: "sse",
-        options: {
-          port,
-          cors: {
-            allowOrigin: process.env.ALLOWED_ORIGINS || "*",
-            allowMethods: "GET, POST, OPTIONS",
-            allowHeaders: "Content-Type, Authorization, X-API-Key, X-Client-ID",
-            exposeHeaders: "Content-Type, Authorization, X-API-Key",
-            maxAge: "86400"
-          }
-        }
-      } : {
-        type: "stdio"
-      }
-    });
+    // Create and configure MCP server
+    const server = createServer();
 
     // Graceful shutdown handler
     const gracefulShutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       
       try {
-        if (globalServices) {
+        if (services) {
           await Promise.all([
-            globalServices.sessionManager?.cleanup(),
-            globalServices.containerManager?.cleanup()
+            services.sessionManager.cleanup(),
+            services.executionManager.cleanup()
           ]);
         }
         
-        await server.stop();
+        await server.close();
         logger.info('Graceful shutdown completed');
         process.exit(0);
       } catch (error) {
@@ -356,22 +361,22 @@ async function main() {
       process.exit(1);
     });
 
-    // Start the server
-    logger.info(`🎉 Starting Opendoor MCP Server with ${useSSE ? 'SSE' : 'STDIO'} transport`);
-    if (useSSE) {
-      logger.info(`📡 SSE endpoint will be available on port ${port}`);
+    // Start web interface if in development or web mode
+    const useWebInterface = process.env.NODE_ENV === 'development' || process.env.WEB_INTERFACE === 'true';
+    if (useWebInterface) {
+      const port = parseInt(process.env.PORT || '3000');
+      await startWebInterface(port);
+      logger.info(`📚 Documentation: http://localhost:${port}`);
     }
+
+    // Start the MCP server
+    logger.info('🎉 Starting Opendoor MCP Server with STDIO transport');
     logger.info('🔧 Multi-language code execution environment ready');
     logger.info('🖥️  VS Code integration enabled');
     logger.info('🎭 Playwright browser automation ready');
     
-    // If using SSE, also start a web interface
-    if (useSSE) {
-      await startWebInterface(port + 1);
-      logger.info(`📚 Documentation: http://localhost:${port + 1}`);
-    }
-    
-    await server.start();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
 
   } catch (error) {
     logger.error('💥 Failed to start server:', error);
@@ -379,5 +384,13 @@ async function main() {
   }
 }
 
-// Start the server
-main();
+// Export for testing
+export { services };
+
+// Start the server if this file is run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}

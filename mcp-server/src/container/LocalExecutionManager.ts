@@ -1,11 +1,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import { Logger } from '../utils/Logger.js';
-import { SessionManager } from '../session/SessionManager.js';
 import { 
   ExecutionResult, 
   CodeExecutionParams, 
-  PlaywrightSessionConfig, 
-  ContainerConfig,
+  PlaywrightSessionConfig,
   SUPPORTED_LANGUAGES 
 } from '../types/McpTypes.js';
 import { v4 as uuidv4 } from 'uuid';

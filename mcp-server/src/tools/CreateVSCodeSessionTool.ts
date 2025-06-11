@@ -1,43 +1,54 @@
-import { MCPTool } from '@ronangrant/mcp-framework';
 import { z } from 'zod';
-import { globalServices } from '../index.js';
+import { ServiceContainer } from '../index.js';
 import { SUPPORTED_LANGUAGES } from '../types/McpTypes.js';
 
-interface CreateVSCodeSessionInput {
-  language?: string;
-  template?: string;
-  memory?: string;
-}
+const CreateVSCodeSessionSchema = z.object({
+  language: z.enum([
+    'python', 'javascript', 'typescript', 'java', 'c', 'cpp', 
+    'csharp', 'rust', 'go', 'php', 'perl', 'ruby', 'lua', 
+    'swift', 'objc'
+  ]).optional(),
+  template: z.enum(['basic', 'web', 'api', 'data-science', 'machine-learning']).optional(),
+  memory: z.enum(['1g', '2g', '4g', '8g']).optional()
+});
 
-export default class CreateVSCodeSessionTool extends MCPTool<CreateVSCodeSessionInput> {
-  name = "create_vscode_session";
-  description = "Create an isolated VS Code development environment with full IDE capabilities";
+type CreateVSCodeSessionInput = z.infer<typeof CreateVSCodeSessionSchema>;
 
-  protected schema = {
-    language: {
-      type: z.enum([
-        'python', 'javascript', 'typescript', 'java', 'c', 'cpp', 
-        'csharp', 'rust', 'go', 'php', 'perl', 'ruby', 'lua', 
-        'swift', 'objc'
-      ] as const).optional(),
-      description: "Primary programming language for the development environment"
-    },
-    template: {
-      type: z.enum(['basic', 'web', 'api', 'data-science', 'machine-learning']).optional(),
-      description: "Project template to initialize the environment with"
-    },
-    memory: {
-      type: z.enum(['1g', '2g', '4g', '8g']).optional(),
-      description: "Memory allocation for the container (default: 4g)"
+export const createVSCodeSessionTool = {
+  definition: {
+    name: "create_vscode_session",
+    description: "Create an isolated VS Code development environment with full IDE capabilities",
+    inputSchema: {
+      type: "object",
+      properties: {
+        language: {
+          type: "string",
+          enum: [
+            'python', 'javascript', 'typescript', 'java', 'c', 'cpp', 
+            'csharp', 'rust', 'go', 'php', 'perl', 'ruby', 'lua', 
+            'swift', 'objc'
+          ],
+          description: "Primary programming language for the development environment"
+        },
+        template: {
+          type: "string",
+          enum: ['basic', 'web', 'api', 'data-science', 'machine-learning'],
+          description: "Project template to initialize the environment with"
+        },
+        memory: {
+          type: "string",
+          enum: ['1g', '2g', '4g', '8g'],
+          description: "Memory allocation for the container (default: 4g)"
+        }
+      },
+      required: []
     }
-  };
+  },
 
-  protected async execute(input: CreateVSCodeSessionInput) {
-    if (!globalServices) {
-      throw new Error('Services not initialized');
-    }
-
-    const { language = 'python', template = 'basic', memory = '4g' } = input;
+  async execute(input: unknown, services: ServiceContainer) {
+    // Validate input
+    const validInput = CreateVSCodeSessionSchema.parse(input);
+    const { language = 'python', template = 'basic', memory = '4g' } = validInput;
 
     // Validate language if provided
     if (language && !SUPPORTED_LANGUAGES[language]) {
@@ -46,7 +57,7 @@ export default class CreateVSCodeSessionTool extends MCPTool<CreateVSCodeSession
 
     try {
       // Create VS Code session
-      const session = await globalServices.sessionManager.createSession({
+      const session = await services.sessionManager.createSession({
         type: 'vscode',
         language,
         memory,
@@ -54,15 +65,17 @@ export default class CreateVSCodeSessionTool extends MCPTool<CreateVSCodeSession
         template
       });
 
-      // Create the VS Code session in the local manager
-      await globalServices.containerManager.createVSCodeSession(session.id, language);
+      // Create the VS Code session in the execution manager
+      await services.executionManager.createVSCodeSession(session.id, language);
 
       // Get VS Code URL
-      const vscodeUrl = await globalServices.containerManager.getVSCodeUrl(session.id);
+      const vscodeUrl = await services.executionManager.getVSCodeUrl(session.id);
 
-      return this.createSuccessResponse({
-        type: "text",
-        text: `**VS Code Development Environment Created Successfully!**
+      return {
+        content: [
+          {
+            type: "text",
+            text: `**VS Code Development Environment Created Successfully!**
 
 **Session Details:**
 - **Session ID:** ${session.id}
@@ -86,10 +99,12 @@ ${Object.entries(session.endpoints).map(([key, url]) => `- **${key}:** ${url}`).
 5. Use the session ID for future operations with this environment
 
 **Note:** The environment may take a few moments to fully initialize. If the VS Code interface doesn't load immediately, please wait 30-60 seconds and refresh.`
-      });
+          }
+        ]
+      };
 
     } catch (error) {
       throw new Error(`Failed to create VS Code session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-}
+};

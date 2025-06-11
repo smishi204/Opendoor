@@ -1,18 +1,15 @@
-import { MCPResource, ResourceContent } from '@ronangrant/mcp-framework';
-import { globalServices } from '../index.js';
+import { ServiceContainer } from '../index.js';
 import { SUPPORTED_LANGUAGES } from '../types/McpTypes.js';
 
-export default class SystemConfigResource extends MCPResource {
-  name = "system_config";
-  description = "System configuration and capabilities information";
-  uri = "opendoor://config/system";
-  mimeType = "application/json";
+export const systemConfigResource = {
+  definition: {
+    uri: "opendoor://config/system",
+    name: "system_config",
+    description: "System configuration and capabilities information",
+    mimeType: "application/json"
+  },
 
-  async read() {
-    if (!globalServices) {
-      throw new Error('Services not initialized');
-    }
-
+  async read(services: ServiceContainer) {
     try {
       const config = {
         server: {
@@ -56,14 +53,7 @@ export default class SystemConfigResource extends MCPResource {
         },
         
         container_config: {
-          base_images: {
-            python: "python:3.11-slim",
-            javascript: "node:18-alpine",
-            typescript: "node:18-alpine",
-            java: "openjdk:17-alpine",
-            go: "golang:1.21-alpine",
-            rust: "rust:1.70-alpine"
-          },
+          execution_method: "Local processes with isolation",
           memory_options: ["1g", "2g", "4g", "8g"],
           network_isolation: true,
           security_policies: [
@@ -78,11 +68,6 @@ export default class SystemConfigResource extends MCPResource {
           stdio: {
             description: "Standard MCP protocol over stdio",
             usage: "Direct integration with MCP clients"
-          },
-          sse: {
-            description: "Server-Sent Events transport",
-            usage: "Web-based integrations",
-            port: parseInt(process.env.PORT || '8080')
           }
         },
         
@@ -95,10 +80,10 @@ export default class SystemConfigResource extends MCPResource {
             supported: ["API Key", "JWT"],
             required: false
           },
-          container_security: {
-            isolation: "Docker containers",
-            network: "Restricted",
-            filesystem: "Sandboxed"
+          code_validation: {
+            enabled: true,
+            patterns_checked: "Dangerous code patterns blocked",
+            sandboxing: "Isolated execution environments"
           }
         },
         
@@ -122,16 +107,18 @@ export default class SystemConfigResource extends MCPResource {
         }
       };
 
-      return [
-        {
-          uri: this.uri,
-          mimeType: this.mimeType,
-          text: JSON.stringify(config, null, 2)
-        }
-      ];
+      return {
+        contents: [
+          {
+            uri: "opendoor://config/system",
+            mimeType: "application/json",
+            text: JSON.stringify(config, null, 2)
+          }
+        ]
+      };
 
     } catch (error) {
       throw new Error(`Failed to read system configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-}
+};
