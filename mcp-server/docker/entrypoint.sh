@@ -29,26 +29,55 @@ wait_for_service() {
     return 1
 }
 
-# Function to check Docker availability
-check_docker() {
-    echo "🐳 Checking Docker availability..."
+# Function to check system requirements for local execution
+check_system_requirements() {
+    echo "🔧 Checking system requirements for local execution..."
     
-    if [ -S /var/run/docker.sock ]; then
-        echo "✅ Docker socket is available at /var/run/docker.sock"
-        
-        # Try to test Docker connection
-        if timeout 10 docker version >/dev/null 2>&1; then
-            echo "✅ Docker is accessible and working!"
-            docker version | head -3
-            return 0
-        else
-            echo "⚠️  Docker socket exists but not accessible (this may be normal in some environments)"
-            return 1
-        fi
+    # Check Python
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_VERSION=$(python3 --version)
+        echo "✅ Python available: $PYTHON_VERSION"
     else
-        echo "⚠️  Docker socket not found (this is normal for testing without Docker)"
+        echo "⚠️  Python3 not found"
         return 1
     fi
+    
+    # Check Node.js
+    if command -v node >/dev/null 2>&1; then
+        NODE_VERSION=$(node --version)
+        echo "✅ Node.js available: $NODE_VERSION"
+    else
+        echo "❌ Node.js not found"
+        return 1
+    fi
+    
+    # Check Java
+    if command -v java >/dev/null 2>&1; then
+        JAVA_VERSION=$(java -version 2>&1 | head -1)
+        echo "✅ Java available: $JAVA_VERSION"
+    else
+        echo "⚠️  Java not found (some code execution features will be limited)"
+    fi
+    
+    # Check Go
+    if command -v go >/dev/null 2>&1; then
+        GO_VERSION=$(go version)
+        echo "✅ Go available: $GO_VERSION"
+    else
+        echo "⚠️  Go not found (Go code execution will be limited)"
+    fi
+    
+    # Check essential tools
+    for tool in gcc g++ make curl wget; do
+        if command -v $tool >/dev/null 2>&1; then
+            echo "✅ $tool available"
+        else
+            echo "⚠️  $tool not found"
+        fi
+    done
+    
+    echo "✅ System requirements check completed"
+    return 0
 }
 
 # Function to initialize directories and permissions
@@ -59,14 +88,14 @@ initialize_environment() {
     mkdir -p \
         /app/logs \
         /app/sessions \
+        /app/venvs \
         /app/temp \
         /tmp/mcp-sessions \
-        /tmp/mcp-containers \
         /var/log/mcp
     
     # Set proper permissions
-    chmod 755 /app/logs /app/sessions /app/temp
-    chmod 777 /tmp/mcp-sessions /tmp/mcp-containers
+    chmod 755 /app/logs /app/sessions /app/venvs /app/temp
+    chmod 777 /tmp/mcp-sessions
     
     echo "✅ Environment initialized"
 }
@@ -175,9 +204,9 @@ display_startup_summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "🛠️  Available Tools:"
-    echo "   • execute_code - Multi-language code execution"
-    echo "   • create_vscode_session - VS Code development environments"
-    echo "   • create_playwright_session - Browser automation"
+    echo "   • execute_code - Local multi-language code execution (Python, Node.js, Java, Go, Rust, C/C++)"
+    echo "   • create_vscode_session - Local VS Code development environments"
+    echo "   • create_playwright_session - Local browser automation"
     echo "   • manage_sessions - Session management"
     echo "   • system_health - System monitoring"
     echo ""
@@ -198,8 +227,8 @@ main() {
     # Validate configuration
     validate_configuration
     
-    # Check Docker availability
-    check_docker || echo "⚠️  Docker not available - some features may be limited"
+    # Check system requirements
+    check_system_requirements || echo "⚠️  Some system requirements missing - some features may be limited"
     
     # Start services
     if ! start_services; then
