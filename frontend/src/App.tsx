@@ -62,11 +62,45 @@ function App() {
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch('/config');
+      const response = await fetch('/config/stdio');
       if (!response.ok) {
         throw new Error('Failed to fetch configuration');
       }
-      const data = await response.json();
+      const stdioConfig = await response.json();
+      
+      // Create a comprehensive config object for the frontend
+      const data = {
+        stdio_servers: [stdioConfig.mcpServers.opendoor],
+        capabilities: {
+          tools: [
+            { name: 'execute_code', description: 'Execute code in isolated virtual environments' },
+            { name: 'create_vscode_session', description: 'Launch VS Code development environments' },
+            { name: 'create_playwright_session', description: 'Browser automation with Playwright' },
+            { name: 'manage_sessions', description: 'Session lifecycle management' },
+            { name: 'system_health', description: 'System monitoring and diagnostics' }
+          ],
+          languages: [
+            'Python', 'JavaScript', 'TypeScript', 'Java', 'Rust', 'Go', 
+            'C', 'C++', 'C#', 'PHP', 'Ruby', 'Perl', 'Lua', 'Swift', 'Objective-C'
+          ],
+          memory_per_session: 'Up to 8GB configurable',
+          isolation: 'Virtual environments with complete dependency isolation',
+          security: {
+            process_isolation: true,
+            virtual_environments: true,
+            resource_limits: true,
+            execution_timeouts: true,
+            code_validation: true
+          }
+        },
+        endpoints: {
+          base: window.location.origin,
+          stdio: '/config/stdio',
+          health: '/health',
+          mcp: '/mcp'
+        }
+      };
+      
       setConfig(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

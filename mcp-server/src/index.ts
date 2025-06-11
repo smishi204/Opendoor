@@ -163,14 +163,69 @@ async function startWebInterface(port: number): Promise<void> {
     res.json({
       mcpServers: {
         "opendoor": {
-          command: "docker",
-          args: [
-            "run", "-i", "--rm",
-            "ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest"
-          ]
+          command: "node",
+          args: ["dist/index.js"]
         }
       }
     });
+  });
+
+  // MCP HTTP endpoint for Railway deployment
+  app.post('/mcp', express.text({ type: '*/*' }), async (req, res) => {
+    try {
+      if (!services) {
+        return res.status(503).json({ error: 'Services not initialized' });
+      }
+
+      const request = JSON.parse(req.body);
+      
+      // Handle MCP protocol requests
+      if (request.method === 'tools/list') {
+        return res.json({
+          tools: [
+            executeCodeTool.definition,
+            createVSCodeSessionTool.definition,
+            createPlaywrightSessionTool.definition,
+            manageSessionsTool.definition,
+            systemHealthTool.definition
+          ]
+        });
+      }
+
+      if (request.method === 'tools/call') {
+        const { name, arguments: args } = request.params;
+        let result;
+
+        switch (name) {
+          case 'execute_code':
+            result = await executeCodeTool.execute(args, services);
+            break;
+          case 'create_vscode_session':
+            result = await createVSCodeSessionTool.execute(args, services);
+            break;
+          case 'create_playwright_session':
+            result = await createPlaywrightSessionTool.execute(args, services);
+            break;
+          case 'manage_sessions':
+            result = await manageSessionsTool.execute(args, services);
+            break;
+          case 'system_health':
+            result = await systemHealthTool.execute(args, services);
+            break;
+          default:
+            return res.status(400).json({ error: `Unknown tool: ${name}` });
+        }
+
+        return res.json(result);
+      }
+
+      return res.status(400).json({ error: 'Unsupported MCP method' });
+    } catch (error) {
+      logger.error('MCP endpoint error:', error);
+      return res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Internal server error' 
+      });
+    }
   });
 
   // Documentation page
@@ -248,37 +303,72 @@ function generateDocumentationHTML(baseUrl: string): string {
         </div>
         <div class="feature">
             <strong>manage_sessions</strong> - List, monitor, and cleanup active sessions
+            <span class="badge">MANAGEMENT</span>
         </div>
         <div class="feature">
             <strong>system_health</strong> - Monitor system resources and service health
+            <span class="badge">MONITORING</span>
         </div>
 
-        <h2>📚 Resources</h2>
+        <h2>🌐 Supported Languages & Virtual Environments</h2>
+        <table class="spec-table">
+            <thead>
+                <tr>
+                    <th>Language</th>
+                    <th>Runtime</th>
+                    <th>Package Manager</th>
+                    <th>Isolation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Python</td><td>Python 3.x</td><td>pip (isolated venv)</td><td>✅ Virtual Environment</td></tr>
+                <tr><td>JavaScript</td><td>Node.js</td><td>npm (isolated)</td><td>✅ Project Environment</td></tr>
+                <tr><td>TypeScript</td><td>Node.js + TypeScript</td><td>npm (isolated)</td><td>✅ Project Environment</td></tr>
+                <tr><td>Java</td><td>OpenJDK</td><td>Maven/Gradle</td><td>✅ Classpath Isolation</td></tr>
+                <tr><td>Rust</td><td>Rust + Cargo</td><td>Cargo (isolated)</td><td>✅ CARGO_HOME</td></tr>
+                <tr><td>Go</td><td>Go Modules</td><td>go mod (isolated)</td><td>✅ GOPATH Isolation</td></tr>
+                <tr><td>C/C++</td><td>GCC/G++</td><td>Build system</td><td>✅ Build Directory</td></tr>
+                <tr><td>PHP</td><td>PHP + Composer</td><td>Composer (isolated)</td><td>✅ Project Environment</td></tr>
+                <tr><td>Ruby</td><td>Ruby + Bundler</td><td>Bundler (isolated)</td><td>✅ Gem Environment</td></tr>
+                <tr><td>C#</td><td>.NET Core</td><td>NuGet</td><td>✅ Project Environment</td></tr>
+            </tbody>
+        </table>
+
+        <h2>🔒 Security Features</h2>
         <div class="feature">
-            <strong>system_config</strong> - Server configuration and capabilities
+            <strong>Process Isolation</strong> - Each execution runs in isolated processes
         </div>
-
-        <h2>💡 Prompts</h2>
         <div class="feature">
-            <strong>usage_guide</strong> - Comprehensive usage instructions and examples
+            <strong>Virtual Environment Isolation</strong> - Language-specific dependency isolation
         </div>
-
-        <h2>🐳 Docker Usage</h2>
-        <pre>
-# Pull and run the MCP server
-docker pull ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
-
-# Run with STDIO transport
-docker run -i --rm \\
-  ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest
-        </pre>
-
-        <h2>🔍 API Endpoints</h2>
-        <div class="endpoint">GET /health - Server health status</div>
-        <div class="endpoint">GET /config/stdio - STDIO configuration JSON</div>
+        <div class="feature">
+            <strong>Resource Limits</strong> - Memory and CPU usage controls
+        </div>
+        <div class="feature">
+            <strong>Execution Timeouts</strong> - Prevent runaway processes
+        </div>
+        <div class="feature">
+            <strong>Code Validation</strong> - Security pattern detection
+        </div>
 
         <h2>📊 System Status</h2>
         <div id="status">Loading...</div>
+
+        <h2>🔍 API Endpoints</h2>
+        <div class="endpoint">GET /health - Server health status and metrics</div>
+        <div class="endpoint">GET /config/stdio - STDIO configuration for MCP clients</div>
+        <div class="endpoint">POST /mcp - MCP protocol endpoint for Railway deployment</div>
+
+        <h2>🚀 Railway Deployment</h2>
+        <div class="highlight">
+            <h3>Production Deployment Instructions</h3>
+            <ol>
+                <li>Deploy this repository to Railway</li>
+                <li>Set environment variables as needed</li>
+                <li>Use the Railway configuration above in your MCP client</li>
+                <li>The server automatically sets up isolated environments for all languages</li>
+            </ol>
+        </div>
     </div>
 
     <script>
@@ -289,10 +379,10 @@ docker run -i --rm \\
                 const btn = element.nextElementSibling;
                 const originalText = btn.textContent;
                 btn.textContent = 'Copied!';
-                btn.style.background = '#27ae60';
+                btn.style.background = 'linear-gradient(145deg, #27ae60, #229954)';
                 setTimeout(() => {
                     btn.textContent = originalText;
-                    btn.style.background = '#3498db';
+                    btn.style.background = 'linear-gradient(145deg, #3498db, #2980b9)';
                 }, 2000);
             });
         }
@@ -301,16 +391,25 @@ docker run -i --rm \\
         fetch('/health')
             .then(response => response.json())
             .then(data => {
+                const services = Object.entries(data.services || {})
+                    .map(([key, value]) => \`<span class="badge">\${key}: \${typeof value === 'object' ? value.status : value}</span>\`)
+                    .join(' ');
+                
                 document.getElementById('status').innerHTML = \`
                     <div class="feature">
-                        <strong>Status:</strong> \${data.status}<br>
-                        <strong>Timestamp:</strong> \${data.timestamp}<br>
-                        <strong>Services:</strong> \${Object.entries(data.services).map(([k,v]) => \`\${k}: \${v}\`).join(', ')}
+                        <strong>Status:</strong> <span class="status healthy">\${data.status}</span><br>
+                        <strong>Uptime:</strong> \${Math.floor(data.uptime || 0)}s<br>
+                        <strong>Memory:</strong> \${Math.round((data.memory?.rss || 0) / 1024 / 1024)}MB<br>
+                        <strong>Services:</strong> \${services}
                     </div>
                 \`;
             })
             .catch(() => {
-                document.getElementById('status').innerHTML = '<div class="feature">Status: Unable to fetch</div>';
+                document.getElementById('status').innerHTML = \`
+                    <div class="feature">
+                        <strong>Status:</strong> <span class="status">Unable to fetch</span>
+                    </div>
+                \`;
             });
     </script>
 </body>

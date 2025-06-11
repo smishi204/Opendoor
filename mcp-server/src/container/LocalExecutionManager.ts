@@ -713,39 +713,122 @@ requires 'Test::More';
       let stderr = '';
       let childProcess: ChildProcess;
 
-      // Determine execution command based on language
-      const getCommand = () => {
-        const venvPath = session.venvPath;
+      // Get the language-specific virtual environment path
+      const languageVenvPath = this.venvCache.get(language);
+      
+      // Determine execution command and environment based on language with virtual environments
+      const getCommandAndEnv = () => {
+        const fileName = path.basename(filePath);
+        const fileNameWithoutExt = path.basename(filePath, path.extname(filePath));
         
         switch (language) {
           case 'python':
-            return venvPath 
-              ? [`${venvPath}/bin/python`, filePath]
-              : ['python3', filePath];
+            if (!languageVenvPath) {
+              return { command: ['python3', filePath], cwd: session.workspaceDir, env: process.env };
+            }
+            return {
+              command: [`${languageVenvPath}/bin/python`, filePath],
+              cwd: session.workspaceDir,
+              env: {
+                ...process.env,
+                PATH: `${languageVenvPath}/bin:${process.env.PATH}`,
+                VIRTUAL_ENV: languageVenvPath
+              }
+            };
           
           case 'javascript':
-            return ['node', filePath];
+            return {
+              command: ['node', filePath],
+              cwd: session.workspaceDir,
+              env: languageVenvPath ? {
+                ...process.env,
+                NODE_PATH: `${languageVenvPath}/node_modules`,
+                PATH: `${languageVenvPath}/node_modules/.bin:${process.env.PATH}`
+              } : process.env
+            };
           
           case 'typescript':
-            return session.venvPath
-              ? [`${session.venvPath}/node_modules/.bin/ts-node`, filePath]
-              : ['ts-node', filePath];
+            if (languageVenvPath) {
+              const tsFilePath = path.join(languageVenvPath, fileName);
+              return {
+                command: ['bash', '-c', `cp "${filePath}" "${tsFilePath}" && cd "${languageVenvPath}" && npx ts-node "${fileName}"`],
+                cwd: languageVenvPath,
+                env: {
+                  ...process.env,
+                  NODE_PATH: `${languageVenvPath}/node_modules`,
+                  PATH: `${languageVenvPath}/node_modules/.bin:${process.env.PATH}`
+                }
+              };
+            }
+            return { command: ['ts-node', filePath], cwd: session.workspaceDir, env: process.env };
           
           case 'java':
-            const className = path.basename(filePath, '.java');
-            return ['bash', '-c', `cd ${path.dirname(filePath)} && javac ${path.basename(filePath)} && java ${className}`];
+            const className = fileNameWithoutExt;
+            if (languageVenvPath) {
+              const javaFilePath = path.join(languageVenvPath, 'src', fileName);
+              return {
+                command: ['bash', '-c', `mkdir -p "${path.dirname(javaFilePath)}" && cp "${filePath}" "${javaFilePath}" && cd "${languageVenvPath}" && javac -d build src/${fileName} && java -cp build ${className}`],
+                cwd: languageVenvPath,
+                env: {
+                  ...process.env,
+                  CLASSPATH: `${languageVenvPath}/lib/*:${languageVenvPath}/build`
+                }
+              };
+            }
+            return {
+              command: ['bash', '-c', `cd ${path.dirname(filePath)} && javac ${path.basename(filePath)} && java ${className}`],
+              cwd: session.workspaceDir,
+              env: process.env
+            };
           
           case 'rust':
-            return ['bash', '-c', `cd ${path.dirname(filePath)} && rustc ${path.basename(filePath)} -o ${path.basename(filePath, '.rs')} && ./${path.basename(filePath, '.rs')}`];
+            if (languageVenvPath) {
+              const rustFilePath = path.join(languageVenvPath, 'src', 'main.rs');
+              return {
+                command: ['bash', '-c', `cp "${filePath}" "${rustFilePath}" && cd "${languageVenvPath}" && CARGO_HOME="${languageVenvPath}/.cargo" cargo run --quiet`],
+                cwd: languageVenvPath,
+                env: {
+                  ...process.env,
+                  CARGO_HOME: `${languageVenvPath}/.cargo`
+                }
+              };
+            }
+            return {
+              command: ['bash', '-c', `cd ${path.dirname(filePath)} && rustc ${path.basename(filePath)} -o ${fileNameWithoutExt} && ./${fileNameWithoutExt}`],
+              cwd: session.workspaceDir,
+              env: process.env
+            };
           
           case 'go':
-            return ['go', 'run', filePath];
+            if (languageVenvPath) {
+              const goFilePath = path.join(languageVenvPath, 'main.go');
+              return {
+                command: ['bash', '-c', `cp "${filePath}" "${goFilePath}" && cd "${languageVenvPath}" && go run main.go`],
+                cwd: languageVenvPath,
+                env: {
+                  ...process.env,
+                  GOPATH: `${languageVenvPath}/gopath`
+                }
+              };
+            }
+            return { command: ['go', 'run', filePath], cwd: session.workspaceDir, env: process.env };
           
           case 'c':
-            return ['bash', '-c', `cd ${path.dirname(filePath)} && gcc ${path.basename(filePath)} -o ${path.basename(filePath, '.c')} && ./${path.basename(filePath, '.c')}`];
-          
           case 'cpp':
-            return ['bash', '-c', `cd ${path.dirname(filePath)} && g++ ${path.basename(filePath)} -o ${path.basename(filePath, '.cpp')} && ./${path.basename(filePath, '.cpp')}`];
+            const compiler = language === 'c' ? 'gcc' : 'g++';
+            if (languageVenvPath) {
+              const srcFilePath = path.join(languageVenvPath, 'src', fileName);
+              return {
+                command: ['bash', '-c', `mkdir -p "${path.dirname(srcFilePath)}" && cp "${filePath}" "${srcFilePath}" && cd "${languageVenvPath}" && ${compiler} src/${fileName} -o build/${fileNameWithoutExt} && ./build/${fileNameWithoutExt}`],
+                cwd: languageVenvPath,
+                env: process.env
+              };
+            }
+            return {
+              command: ['bash', '-c', `cd ${path.dirname(filePath)} && ${compiler} ${path.basename(filePath)} -o ${fileNameWithoutExt} && ./${fileNameWithoutExt}`],
+              cwd: session.workspaceDir,
+              env: process.env
+            };
           
           default:
             throw new Error(`Execution not implemented for language: ${language}`);
@@ -753,10 +836,11 @@ requires 'Test::More';
       };
 
       try {
-        const [command, ...args] = getCommand();
-        childProcess = spawn(command, args, {
-          cwd: session.workspaceDir,
-          env: { ...process.env, PATH: process.env.PATH },
+        const { command, cwd, env } = getCommandAndEnv();
+        const [commandName, ...args] = command;
+        childProcess = spawn(commandName, args, {
+          cwd,
+          env,
           stdio: 'pipe'
         });
 
