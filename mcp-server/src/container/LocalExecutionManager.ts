@@ -94,31 +94,37 @@ export class LocalExecutionManager {
   }
 
   private async setupVirtualEnvironments(): Promise<void> {
-    this.logger.info('🐍 Setting up virtual environments for supported languages...');
+    this.logger.info('🌐 Setting up isolated virtual environments for all supported languages...');
     
     const languageSetup = {
       python: async () => {
         const venvPath = '/app/venvs/python';
         try {
-          // Create Python virtual environment
-          await execAsync(`python3 -m venv ${venvPath}`);
+          // Create Python virtual environment with isolated pip
+          await execAsync(`python3 -m venv ${venvPath} --clear`);
+          await execAsync(`${venvPath}/bin/pip install --upgrade pip setuptools wheel`);
           this.venvCache.set('python', venvPath);
-          this.logger.debug('✅ Python virtual environment created');
+          this.logger.debug('✅ Python virtual environment created with isolated pip');
         } catch (error) {
           this.logger.warn('Failed to create Python venv:', error);
         }
       },
       
       javascript: async () => {
-        // JavaScript/Node.js doesn't need venv but we can set up a project directory
         const projectPath = '/app/venvs/javascript';
         try {
           await fs.mkdir(projectPath, { recursive: true });
-          await execAsync(`cd ${projectPath} && npm init -y`);
+          await fs.writeFile(`${projectPath}/package.json`, JSON.stringify({
+            name: "javascript-env",
+            version: "1.0.0",
+            private: true,
+            type: "module"
+          }, null, 2));
+          await fs.mkdir(`${projectPath}/node_modules`, { recursive: true });
           this.venvCache.set('javascript', projectPath);
-          this.logger.debug('✅ JavaScript project directory created');
+          this.logger.debug('✅ JavaScript isolated environment created');
         } catch (error) {
-          this.logger.warn('Failed to create JavaScript project:', error);
+          this.logger.warn('Failed to create JavaScript environment:', error);
         }
       },
 
@@ -126,11 +132,27 @@ export class LocalExecutionManager {
         const projectPath = '/app/venvs/typescript';
         try {
           await fs.mkdir(projectPath, { recursive: true });
-          await execAsync(`cd ${projectPath} && npm init -y`);
+          await fs.writeFile(`${projectPath}/package.json`, JSON.stringify({
+            name: "typescript-env",
+            version: "1.0.0",
+            private: true,
+            type: "module"
+          }, null, 2));
+          await fs.writeFile(`${projectPath}/tsconfig.json`, JSON.stringify({
+            compilerOptions: {
+              target: "ES2022",
+              module: "ESNext",
+              moduleResolution: "node",
+              esModuleInterop: true,
+              allowSyntheticDefaultImports: true,
+              strict: true,
+              skipLibCheck: true
+            }
+          }, null, 2));
           this.venvCache.set('typescript', projectPath);
-          this.logger.debug('✅ TypeScript project directory created');
+          this.logger.debug('✅ TypeScript isolated environment created');
         } catch (error) {
-          this.logger.warn('Failed to create TypeScript project:', error);
+          this.logger.warn('Failed to create TypeScript environment:', error);
         }
       },
 
@@ -140,10 +162,11 @@ export class LocalExecutionManager {
           await fs.mkdir(projectPath, { recursive: true });
           await fs.mkdir(`${projectPath}/src`, { recursive: true });
           await fs.mkdir(`${projectPath}/lib`, { recursive: true });
+          await fs.mkdir(`${projectPath}/build`, { recursive: true });
           this.venvCache.set('java', projectPath);
-          this.logger.debug('✅ Java project directory created');
+          this.logger.debug('✅ Java isolated environment created');
         } catch (error) {
-          this.logger.warn('Failed to create Java project:', error);
+          this.logger.warn('Failed to create Java environment:', error);
         }
       },
 
@@ -151,18 +174,22 @@ export class LocalExecutionManager {
         const projectPath = '/app/venvs/rust';
         try {
           await fs.mkdir(projectPath, { recursive: true });
-          // Initialize a basic Cargo project if cargo is available
+          // Set CARGO_HOME for this environment
+          const cargoHome = `${projectPath}/.cargo`;
+          await fs.mkdir(cargoHome, { recursive: true });
+          
           try {
-            await execAsync(`cd ${projectPath} && cargo init --name rust_project`);
+            await execAsync(`cd ${projectPath} && CARGO_HOME=${cargoHome} cargo init --name rust_project --quiet`);
           } catch {
             // Fallback: create basic structure manually
             await fs.mkdir(`${projectPath}/src`, { recursive: true });
             await fs.writeFile(`${projectPath}/src/main.rs`, 'fn main() {\n    println!("Hello, world!");\n}');
+            await fs.writeFile(`${projectPath}/Cargo.toml`, `[package]\nname = "rust_project"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n`);
           }
           this.venvCache.set('rust', projectPath);
-          this.logger.debug('✅ Rust project directory created');
+          this.logger.debug('✅ Rust isolated environment created');
         } catch (error) {
-          this.logger.warn('Failed to create Rust project:', error);
+          this.logger.warn('Failed to create Rust environment:', error);
         }
       },
 
@@ -170,76 +197,369 @@ export class LocalExecutionManager {
         const projectPath = '/app/venvs/go';
         try {
           await fs.mkdir(projectPath, { recursive: true });
-          await execAsync(`cd ${projectPath} && go mod init go_project`);
+          // Set GOPATH for this environment
+          const goPath = `${projectPath}/gopath`;
+          await fs.mkdir(goPath, { recursive: true });
+          await fs.mkdir(`${goPath}/src`, { recursive: true });
+          await fs.mkdir(`${goPath}/bin`, { recursive: true });
+          await fs.mkdir(`${goPath}/pkg`, { recursive: true });
+          
+          await execAsync(`cd ${projectPath} && GOPATH=${goPath} go mod init go_project`);
           this.venvCache.set('go', projectPath);
-          this.logger.debug('✅ Go project directory created');
+          this.logger.debug('✅ Go isolated environment created');
         } catch (error) {
-          this.logger.warn('Failed to create Go project:', error);
+          this.logger.warn('Failed to create Go environment:', error);
+        }
+      },
+
+      php: async () => {
+        const projectPath = '/app/venvs/php';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.writeFile(`${projectPath}/composer.json`, JSON.stringify({
+            name: "php-env/project",
+            type: "project",
+            require: {},
+            autoload: {
+              "psr-4": { "": "src/" }
+            }
+          }, null, 2));
+          await fs.mkdir(`${projectPath}/src`, { recursive: true });
+          this.venvCache.set('php', projectPath);
+          this.logger.debug('✅ PHP isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create PHP environment:', error);
+        }
+      },
+
+      ruby: async () => {
+        const projectPath = '/app/venvs/ruby';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.writeFile(`${projectPath}/Gemfile`, 'source "https://rubygems.org"\n\nruby ">= 2.7.0"\n\n# Add your gems here\n');
+          await fs.writeFile(`${projectPath}/.ruby-version`, '3.0.0');
+          this.venvCache.set('ruby', projectPath);
+          this.logger.debug('✅ Ruby isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create Ruby environment:', error);
+        }
+      },
+
+      perl: async () => {
+        const projectPath = '/app/venvs/perl';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.mkdir(`${projectPath}/lib`, { recursive: true });
+          await fs.mkdir(`${projectPath}/local`, { recursive: true });
+          // Create cpanfile for dependencies
+          await fs.writeFile(`${projectPath}/cpanfile`, '# Add Perl modules here\n');
+          this.venvCache.set('perl', projectPath);
+          this.logger.debug('✅ Perl isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create Perl environment:', error);
+        }
+      },
+
+      lua: async () => {
+        const projectPath = '/app/venvs/lua';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.mkdir(`${projectPath}/lib`, { recursive: true });
+          this.venvCache.set('lua', projectPath);
+          this.logger.debug('✅ Lua isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create Lua environment:', error);
+        }
+      },
+
+      c: async () => {
+        const projectPath = '/app/venvs/c';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.mkdir(`${projectPath}/src`, { recursive: true });
+          await fs.mkdir(`${projectPath}/build`, { recursive: true });
+          await fs.mkdir(`${projectPath}/include`, { recursive: true });
+          this.venvCache.set('c', projectPath);
+          this.logger.debug('✅ C isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create C environment:', error);
+        }
+      },
+
+      cpp: async () => {
+        const projectPath = '/app/venvs/cpp';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.mkdir(`${projectPath}/src`, { recursive: true });
+          await fs.mkdir(`${projectPath}/build`, { recursive: true });
+          await fs.mkdir(`${projectPath}/include`, { recursive: true });
+          this.venvCache.set('cpp', projectPath);
+          this.logger.debug('✅ C++ isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create C++ environment:', error);
+        }
+      },
+
+      csharp: async () => {
+        const projectPath = '/app/venvs/csharp';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          // Create a basic .NET project structure
+          try {
+            await execAsync(`cd ${projectPath} && dotnet new console --force --name CSharpProject`);
+          } catch {
+            // Fallback: create basic structure manually
+            await fs.writeFile(`${projectPath}/Program.cs`, 'using System;\n\nclass Program\n{\n    static void Main()\n    {\n        Console.WriteLine("Hello World!");\n    }\n}');
+          }
+          this.venvCache.set('csharp', projectPath);
+          this.logger.debug('✅ C# isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create C# environment:', error);
+        }
+      },
+
+      swift: async () => {
+        const projectPath = '/app/venvs/swift';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          try {
+            await execAsync(`cd ${projectPath} && swift package init --type executable --name SwiftProject`);
+          } catch {
+            // Fallback: create basic structure manually
+            await fs.mkdir(`${projectPath}/Sources`, { recursive: true });
+            await fs.writeFile(`${projectPath}/Sources/main.swift`, 'print("Hello, World!")');
+          }
+          this.venvCache.set('swift', projectPath);
+          this.logger.debug('✅ Swift isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create Swift environment:', error);
+        }
+      },
+
+      objc: async () => {
+        const projectPath = '/app/venvs/objc';
+        try {
+          await fs.mkdir(projectPath, { recursive: true });
+          await fs.mkdir(`${projectPath}/src`, { recursive: true });
+          await fs.mkdir(`${projectPath}/build`, { recursive: true });
+          this.venvCache.set('objc', projectPath);
+          this.logger.debug('✅ Objective-C isolated environment created');
+        } catch (error) {
+          this.logger.warn('Failed to create Objective-C environment:', error);
         }
       }
     };
 
-    // Set up environments for all supported languages
-    const setupPromises = Object.entries(languageSetup).map(async ([lang, setupFn]) => {
-      if (SUPPORTED_LANGUAGES[lang]) {
+    // Set up environments for all supported languages in parallel
+    const setupPromises = Object.entries(SUPPORTED_LANGUAGES).map(async ([lang]) => {
+      const setupFn = languageSetup[lang as keyof typeof languageSetup];
+      if (setupFn) {
         await setupFn();
       }
     });
 
     await Promise.allSettled(setupPromises);
+    this.logger.info(`✅ Created isolated environments for ${Object.keys(this.venvCache).length} languages`);
   }
 
   private async installLanguagePackages(): Promise<void> {
-    this.logger.info('📦 Installing language packages...');
+    this.logger.info('📦 Installing essential packages for all language environments...');
+
+    const installOperations = [];
 
     // Install Python packages
     const pythonVenv = this.venvCache.get('python');
     if (pythonVenv) {
-      try {
-        const packages = [
-          'requests', 'numpy', 'pandas', 'matplotlib', 'seaborn',
-          'scikit-learn', 'jupyter', 'plotly', 'beautifulsoup4',
-          'lxml', 'openpyxl', 'pillow', 'python-dateutil', 'pytz'
-        ];
-        
-        await execAsync(`${pythonVenv}/bin/pip install ${packages.join(' ')}`);
-        this.logger.debug('✅ Python packages installed');
-      } catch (error) {
-        this.logger.warn('Failed to install Python packages:', error);
-      }
+      installOperations.push(async () => {
+        try {
+          const packages = [
+            'requests', 'numpy', 'pandas', 'matplotlib', 'seaborn',
+            'scikit-learn', 'jupyter', 'plotly', 'beautifulsoup4',
+            'lxml', 'openpyxl', 'pillow', 'python-dateutil', 'pytz',
+            'flask', 'fastapi', 'pytest', 'black', 'flake8'
+          ];
+          
+          await execAsync(`${pythonVenv}/bin/pip install ${packages.join(' ')} --quiet --no-warn-script-location`);
+          this.logger.debug('✅ Python packages installed in virtual environment');
+        } catch (error) {
+          this.logger.warn('Failed to install Python packages:', error);
+        }
+      });
     }
 
-    // Install Node.js packages
+    // Install Node.js packages for JavaScript
     const jsProject = this.venvCache.get('javascript');
     if (jsProject) {
-      try {
-        const packages = [
-          'express', 'lodash', 'axios', 'moment', 'uuid',
-          'jest', 'webpack', 'webpack-cli'
-        ];
-        
-        await execAsync(`cd ${jsProject} && npm install ${packages.join(' ')}`);
-        this.logger.debug('✅ JavaScript packages installed');
-      } catch (error) {
-        this.logger.warn('Failed to install JavaScript packages:', error);
-      }
+      installOperations.push(async () => {
+        try {
+          const packages = [
+            'express', 'lodash', 'axios', 'uuid', 'chalk',
+            'jest', 'webpack', 'webpack-cli', 'nodemon',
+            'eslint', 'prettier'
+          ];
+          
+          await execAsync(`cd ${jsProject} && npm install ${packages.join(' ')} --silent`);
+          this.logger.debug('✅ JavaScript packages installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install JavaScript packages:', error);
+        }
+      });
     }
 
     // Install TypeScript packages
     const tsProject = this.venvCache.get('typescript');
     if (tsProject) {
-      try {
-        const packages = [
-          'typescript', 'ts-node', '@types/node', 'nodemon',
-          'eslint', '@typescript-eslint/parser', '@typescript-eslint/eslint-plugin'
-        ];
-        
-        await execAsync(`cd ${tsProject} && npm install ${packages.join(' ')}`);
-        this.logger.debug('✅ TypeScript packages installed');
-      } catch (error) {
-        this.logger.warn('Failed to install TypeScript packages:', error);
-      }
+      installOperations.push(async () => {
+        try {
+          const packages = [
+            'typescript', 'ts-node', '@types/node', 'nodemon',
+            'eslint', '@typescript-eslint/parser', '@typescript-eslint/eslint-plugin',
+            'prettier', 'jest', '@types/jest', 'ts-jest'
+          ];
+          
+          await execAsync(`cd ${tsProject} && npm install ${packages.join(' ')} --silent`);
+          this.logger.debug('✅ TypeScript packages installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install TypeScript packages:', error);
+        }
+      });
     }
+
+    // Install Ruby gems
+    const rubyProject = this.venvCache.get('ruby');
+    if (rubyProject) {
+      installOperations.push(async () => {
+        try {
+          // Add common gems to Gemfile
+          const gemfileContent = `source "https://rubygems.org"
+
+ruby ">= 2.7.0"
+
+gem "json"
+gem "net-http"
+gem "nokogiri"
+gem "rspec"
+gem "rubocop"
+gem "bundler"
+`;
+          await fs.writeFile(`${rubyProject}/Gemfile`, gemfileContent);
+          await execAsync(`cd ${rubyProject} && bundle install --quiet`);
+          this.logger.debug('✅ Ruby gems installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install Ruby gems:', error);
+        }
+      });
+    }
+
+    // Install PHP packages via Composer
+    const phpProject = this.venvCache.get('php');
+    if (phpProject) {
+      installOperations.push(async () => {
+        try {
+          const composerContent = {
+            name: "php-env/project",
+            type: "project",
+            require: {
+              "php": ">=7.4",
+              "guzzlehttp/guzzle": "^7.0",
+              "symfony/console": "^5.0",
+              "monolog/monolog": "^2.0"
+            },
+            "require-dev": {
+              "phpunit/phpunit": "^9.0"
+            },
+            autoload: {
+              "psr-4": { "": "src/" }
+            }
+          };
+          
+          await fs.writeFile(`${phpProject}/composer.json`, JSON.stringify(composerContent, null, 2));
+          await execAsync(`cd ${phpProject} && composer install --quiet --no-dev`);
+          this.logger.debug('✅ PHP packages installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install PHP packages:', error);
+        }
+      });
+    }
+
+    // Install Rust dependencies
+    const rustProject = this.venvCache.get('rust');
+    if (rustProject) {
+      installOperations.push(async () => {
+        try {
+          // Add common dependencies to Cargo.toml
+          const cargoContent = `[package]
+name = "rust_project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
+`;
+          
+          await fs.writeFile(`${rustProject}/Cargo.toml`, cargoContent);
+          const cargoHome = `${rustProject}/.cargo`;
+          await execAsync(`cd ${rustProject} && CARGO_HOME=${cargoHome} cargo build --quiet`);
+          this.logger.debug('✅ Rust dependencies installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install Rust dependencies:', error);
+        }
+      });
+    }
+
+    // Install Go modules
+    const goProject = this.venvCache.get('go');
+    if (goProject) {
+      installOperations.push(async () => {
+        try {
+          const goPath = `${goProject}/gopath`;
+          // Add common Go modules
+          const modules = [
+            'github.com/gin-gonic/gin@latest',
+            'github.com/gorilla/mux@latest',
+            'encoding/json@latest'
+          ];
+          
+          for (const module of modules.slice(0, 2)) { // Skip built-in modules
+            await execAsync(`cd ${goProject} && GOPATH=${goPath} go get ${module}`);
+          }
+          this.logger.debug('✅ Go modules installed in isolated environment');
+        } catch (error) {
+          this.logger.warn('Failed to install Go modules:', error);
+        }
+      });
+    }
+
+    // Install Perl modules
+    const perlProject = this.venvCache.get('perl');
+    if (perlProject) {
+      installOperations.push(async () => {
+        try {
+          const cpanfileContent = `requires 'JSON';
+requires 'LWP::UserAgent';
+requires 'DBI';
+requires 'Test::More';
+`;
+          await fs.writeFile(`${perlProject}/cpanfile`, cpanfileContent);
+          // Note: cpanm installation would happen here if available
+          this.logger.debug('✅ Perl environment configured');
+        } catch (error) {
+          this.logger.warn('Failed to configure Perl environment:', error);
+        }
+      });
+    }
+
+    // Run all package installations in parallel with limited concurrency
+    const concurrentInstalls = 3; // Install 3 languages at a time to avoid overwhelming the system
+    for (let i = 0; i < installOperations.length; i += concurrentInstalls) {
+      const batch = installOperations.slice(i, i + concurrentInstalls);
+      await Promise.allSettled(batch.map(op => op()));
+    }
+
+    this.logger.info(`✅ Package installation completed for ${installOperations.length} language environments`);
   }
 
   private async cleanupOldSessions(): Promise<void> {
