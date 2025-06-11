@@ -101,7 +101,7 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
     echo 'stderr_logfile=/var/log/supervisor/mcp-server.err.log' >> /etc/supervisord.conf && \
     echo 'stdout_logfile=/var/log/supervisor/mcp-server.out.log' >> /etc/supervisord.conf && \
-    echo 'environment=PORT=%(ENV_PORT)s,NODE_ENV=production,REDIS_URL=redis://localhost:6379,MCP_TRANSPORT=sse' >> /etc/supervisord.conf
+    echo 'environment=PORT=%(ENV_PORT)s,NODE_ENV=production,WEB_INTERFACE=true,REDIS_URL=redis://localhost:6379,MCP_TRANSPORT=sse' >> /etc/supervisord.conf
 
 # Create startup script
 RUN echo '#!/bin/bash' > /start.sh && \
@@ -116,6 +116,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 # Environment variables for local execution
 ENV NODE_ENV=production \
+    WEB_INTERFACE=true \
     MCP_TRANSPORT=sse \
     HOST=0.0.0.0 \
     REDIS_URL=redis://localhost:6379 \
@@ -124,6 +125,6 @@ ENV NODE_ENV=production \
     JAVA_HOME=/usr/lib/jvm/java-17-openjdk \
     GOPATH=/usr/local/go
 
-EXPOSE $PORT
+EXPOSE 3000
 
 CMD ["/start.sh"]

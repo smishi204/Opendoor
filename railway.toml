@@ -7,4 +7,5 @@ restartPolicyMaxRetries = 3
 
 [env]
 NODE_ENV = "production"
+WEB_INTERFACE = "true"
 MCP_TRANSPORT = "sse"
