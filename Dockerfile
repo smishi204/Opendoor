@@ -17,6 +17,8 @@ RUN apk add --no-cache \
     gcc \
     g++ \
     make \
+    musl-dev \
+    linux-headers \
     openjdk17-jdk \
     go \
     ca-certificates \
