@@ -66,12 +66,18 @@ RUN mkdir -p \
     /var/run/redis \
     /var/lib/redis
 
-# Copy and install dependencies
-COPY mcp-server/package*.json ./
-RUN npm ci --only=production
+# Copy workspace configuration first
+COPY package*.json ./
+COPY mcp-server/package*.json ./mcp-server/
+
+# Install all dependencies using workspace setup
+RUN npm ci --workspace=mcp-server --include-workspace-root
 
 # Copy source code
-COPY mcp-server/ .
+COPY mcp-server/ ./mcp-server/
+
+# Change working directory to mcp-server for build
+WORKDIR /app/mcp-server
 
 # Build the application
 RUN npm run build
@@ -96,7 +102,7 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'stdout_logfile=/var/log/supervisor/redis.out.log' >> /etc/supervisord.conf && \
     echo '[program:mcp-server]' >> /etc/supervisord.conf && \
     echo 'command=node dist/index.js' >> /etc/supervisord.conf && \
-    echo 'directory=/app' >> /etc/supervisord.conf && \
+    echo 'directory=/app/mcp-server' >> /etc/supervisord.conf && \
     echo 'autostart=true' >> /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
     echo 'stderr_logfile=/var/log/supervisor/mcp-server.err.log' >> /etc/supervisord.conf && \
@@ -107,6 +113,7 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
 RUN echo '#!/bin/bash' > /start.sh && \
     echo 'export PORT=${PORT:-3000}' >> /start.sh && \
     echo 'sed -i "s/%(ENV_PORT)s/$PORT/g" /etc/supervisord.conf' >> /start.sh && \
+    echo 'cd /app/mcp-server' >> /start.sh && \
     echo 'exec supervisord -c /etc/supervisord.conf' >> /start.sh && \
     chmod +x /start.sh
 
