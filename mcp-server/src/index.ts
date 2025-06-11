@@ -2,6 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import cors from 'cors';
@@ -170,62 +171,36 @@ async function startWebInterface(port: number): Promise<void> {
     });
   });
 
-  // MCP HTTP endpoint for Railway deployment
-  app.post('/mcp', express.text({ type: '*/*' }), async (req, res) => {
-    try {
-      if (!services) {
-        return res.status(503).json({ error: 'Services not initialized' });
-      }
-
-      const request = JSON.parse(req.body);
-      
-      // Handle MCP protocol requests
-      if (request.method === 'tools/list') {
-        return res.json({
-          tools: [
-            executeCodeTool.definition,
-            createVSCodeSessionTool.definition,
-            createPlaywrightSessionTool.definition,
-            manageSessionsTool.definition,
-            systemHealthTool.definition
-          ]
-        });
-      }
-
-      if (request.method === 'tools/call') {
-        const { name, arguments: args } = request.params;
-        let result;
-
-        switch (name) {
-          case 'execute_code':
-            result = await executeCodeTool.execute(args, services);
-            break;
-          case 'create_vscode_session':
-            result = await createVSCodeSessionTool.execute(args, services);
-            break;
-          case 'create_playwright_session':
-            result = await createPlaywrightSessionTool.execute(args, services);
-            break;
-          case 'manage_sessions':
-            result = await manageSessionsTool.execute(args, services);
-            break;
-          case 'system_health':
-            result = await systemHealthTool.execute(args, services);
-            break;
-          default:
-            return res.status(400).json({ error: `Unknown tool: ${name}` });
-        }
-
-        return res.json(result);
-      }
-
-      return res.status(400).json({ error: 'Unsupported MCP method' });
-    } catch (error) {
-      logger.error('MCP endpoint error:', error);
-      return res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Internal server error' 
-      });
+  // SSE endpoint for MCP transport
+  app.get('/sse', (req, res) => {
+    if (!services) {
+      return res.status(503).json({ error: 'Services not initialized' });
     }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+
+    // Create SSE transport for this connection
+    const sseTransport = new SSEServerTransport('/sse', res);
+    
+    // Create a new server instance for this SSE connection
+    const sseServer = createServer();
+    
+    // Connect the server to the SSE transport
+    sseServer.connect(sseTransport).catch((error) => {
+      logger.error('SSE connection error:', error);
+      res.end();
+    });
+
+    // Handle client disconnect
+    req.on('close', () => {
+      logger.debug('SSE client disconnected');
+      sseServer.close().catch(console.error);
+    });
   });
 
   // Documentation page
@@ -246,11 +221,20 @@ function generateDocumentationHTML(baseUrl: string): string {
   const stdioConfig = {
     mcpServers: {
       "opendoor": {
-        command: "docker",
-        args: [
-          "run", "-i", "--rm",
-          "ghcr.io/openhands-mentat-cli/opendoor/opendoor-mcp:latest"
-        ]
+        command: "node",
+        args: ["dist/index.js"]
+      }
+    }
+  };
+
+  const sseConfig = {
+    mcpServers: {
+      "opendoor": {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/client-sse"],
+        env: {
+          MCP_SERVER_URL: `${baseUrl}/sse`
+        }
       }
     }
   };
@@ -286,9 +270,16 @@ function generateDocumentationHTML(baseUrl: string): string {
         
         <div class="config-section">
             <h3>📟 STDIO Configuration</h3>
-            <p>For command-line clients and production deployments:</p>
+            <p>For local development and testing:</p>
             <pre id="stdio-config">${JSON.stringify(stdioConfig, null, 2)}</pre>
             <button class="copy-btn" onclick="copyToClipboard('stdio-config')">Copy STDIO Config</button>
+        </div>
+
+        <div class="config-section">
+            <h3>🌐 SSE Configuration</h3>
+            <p>For Railway production deployment:</p>
+            <pre id="sse-config">${JSON.stringify(sseConfig, null, 2)}</pre>
+            <button class="copy-btn" onclick="copyToClipboard('sse-config')">Copy SSE Config</button>
         </div>
 
         <h2>🛠️ Available Tools</h2>
@@ -357,7 +348,7 @@ function generateDocumentationHTML(baseUrl: string): string {
         <h2>🔍 API Endpoints</h2>
         <div class="endpoint">GET /health - Server health status and metrics</div>
         <div class="endpoint">GET /config/stdio - STDIO configuration for MCP clients</div>
-        <div class="endpoint">POST /mcp - MCP protocol endpoint for Railway deployment</div>
+        <div class="endpoint">GET /sse - SSE transport endpoint for Railway deployment</div>
 
         <h2>🚀 Railway Deployment</h2>
         <div class="highlight">
@@ -365,7 +356,7 @@ function generateDocumentationHTML(baseUrl: string): string {
             <ol>
                 <li>Deploy this repository to Railway</li>
                 <li>Set environment variables as needed</li>
-                <li>Use the Railway configuration above in your MCP client</li>
+                <li>Use the SSE configuration above in your MCP client</li>
                 <li>The server automatically sets up isolated environments for all languages</li>
             </ol>
         </div>

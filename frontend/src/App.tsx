@@ -97,7 +97,7 @@ function App() {
           base: window.location.origin,
           stdio: '/config/stdio',
           health: '/health',
-          mcp: '/mcp'
+          sse: '/sse'
         }
       };
       
