@@ -83,29 +83,38 @@ RUN echo "bind 127.0.0.1" > /etc/redis/redis.conf && \
     echo "logfile /var/log/redis/redis.log" >> /etc/redis/redis.conf && \
     echo "dir /var/lib/redis" >> /etc/redis/redis.conf
 
-# Create supervisord config without Docker daemon
+# Create supervisord config - START WEB INTERFACE FIRST so Railway detects it
 RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'nodaemon=true' >> /etc/supervisord.conf && \
     echo 'user=root' >> /etc/supervisord.conf && \
     echo 'logfile=/var/log/supervisor/supervisord.log' >> /etc/supervisord.conf && \
-    echo '[program:redis]' >> /etc/supervisord.conf && \
-    echo 'command=redis-server /etc/redis/redis.conf' >> /etc/supervisord.conf && \
-    echo 'autostart=true' >> /etc/supervisord.conf && \
-    echo 'autorestart=true' >> /etc/supervisord.conf && \
-    echo 'stderr_logfile=/var/log/supervisor/redis.err.log' >> /etc/supervisord.conf && \
-    echo 'stdout_logfile=/var/log/supervisor/redis.out.log' >> /etc/supervisord.conf && \
     echo '[program:mcp-server]' >> /etc/supervisord.conf && \
     echo 'command=node dist/index.js' >> /etc/supervisord.conf && \
     echo 'directory=/app' >> /etc/supervisord.conf && \
     echo 'autostart=true' >> /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
+    echo 'priority=100' >> /etc/supervisord.conf && \
     echo 'stderr_logfile=/var/log/supervisor/mcp-server.err.log' >> /etc/supervisord.conf && \
     echo 'stdout_logfile=/var/log/supervisor/mcp-server.out.log' >> /etc/supervisord.conf && \
-    echo 'environment=PORT=%(ENV_PORT)s,NODE_ENV=production,WEB_INTERFACE=true,REDIS_URL=redis://localhost:6379,MCP_TRANSPORT=sse' >> /etc/supervisord.conf
+    echo 'environment=PORT=%(ENV_PORT)s,NODE_ENV=production,WEB_INTERFACE=true,REDIS_URL=redis://localhost:6379,MCP_TRANSPORT=sse' >> /etc/supervisord.conf && \
+    echo '[program:redis]' >> /etc/supervisord.conf && \
+    echo 'command=redis-server /etc/redis/redis.conf' >> /etc/supervisord.conf && \
+    echo 'autostart=true' >> /etc/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisord.conf && \
+    echo 'priority=200' >> /etc/supervisord.conf && \
+    echo 'stderr_logfile=/var/log/supervisor/redis.err.log' >> /etc/supervisord.conf && \
+    echo 'stdout_logfile=/var/log/supervisor/redis.out.log' >> /etc/supervisord.conf
 
 # Create startup script
 RUN echo '#!/bin/bash' > /start.sh && \
     echo 'export PORT=${PORT:-3000}' >> /start.sh && \
+    echo 'export NODE_ENV=production' >> /start.sh && \
+    echo 'export WEB_INTERFACE=true' >> /start.sh && \
+    echo 'export MCP_TRANSPORT=sse' >> /start.sh && \
+    echo 'export REDIS_URL=redis://localhost:6379' >> /start.sh && \
+    echo 'echo "🚀 Starting Opendoor on port $PORT"' >> /start.sh && \
+    echo 'echo "🌐 Web interface: WEB_INTERFACE=$WEB_INTERFACE"' >> /start.sh && \
+    echo 'echo "🔧 Environment: NODE_ENV=$NODE_ENV"' >> /start.sh && \
     echo 'sed -i "s/%(ENV_PORT)s/$PORT/g" /etc/supervisord.conf' >> /start.sh && \
     echo 'exec supervisord -c /etc/supervisord.conf' >> /start.sh && \
     chmod +x /start.sh
