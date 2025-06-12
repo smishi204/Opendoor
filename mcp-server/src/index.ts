@@ -252,13 +252,19 @@ function generateDocumentationHTML(baseUrl: string): string {
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
         h2 { color: #34495e; margin-top: 30px; }
         .config-section { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3498db; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .copy-btn { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
-        .copy-btn:hover { background: #2980b9; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 14px; line-height: 1.4; }
+        .copy-btn { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px; transition: all 0.3s; }
+        .copy-btn:hover { background: #2980b9; transform: translateY(-1px); }
         .feature { background: #e8f5e8; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #27ae60; }
         .endpoint { background: #fff3cd; padding: 10px; margin: 5px 0; border-radius: 4px; border-left: 3px solid #ffc107; }
         .status { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .status.healthy { background: #d4edda; color: #155724; }
+        .spec-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .spec-table th, .spec-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .spec-table th { background: #f8f9fa; font-weight: 600; }
+        .spec-table tr:hover { background: #f8f9fa; }
+        .highlight { background: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2196f3; margin: 20px 0; }
+        .badge { background: #6c757d; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; }
     </style>
 </head>
 <body>
@@ -269,6 +275,23 @@ function generateDocumentationHTML(baseUrl: string): string {
         <h2>🔗 Connection Configuration</h2>
         
         <div class="config-section">
+            <h3>📟 Claude Desktop Configuration (Local)</h3>
+            <p>Add this to your Claude Desktop configuration file:</p>
+            <pre id="claude-config">{
+  "mcpServers": {
+    "opendoor": {
+      "command": "node",
+      "args": ["${process.cwd()}/dist/index.js"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}</pre>
+            <button class="copy-btn" onclick="copyToClipboard('claude-config')">Copy Claude Config</button>
+        </div>
+
+        <div class="config-section">
             <h3>📟 STDIO Configuration</h3>
             <p>For local development and testing:</p>
             <pre id="stdio-config">${JSON.stringify(stdioConfig, null, 2)}</pre>
@@ -276,10 +299,11 @@ function generateDocumentationHTML(baseUrl: string): string {
         </div>
 
         <div class="config-section">
-            <h3>🌐 SSE Configuration</h3>
+            <h3>🌐 SSE Configuration (Railway)</h3>
             <p>For Railway production deployment:</p>
             <pre id="sse-config">${JSON.stringify(sseConfig, null, 2)}</pre>
             <button class="copy-btn" onclick="copyToClipboard('sse-config')">Copy SSE Config</button>
+            <p><strong>Note:</strong> Replace the URL with your actual Railway deployment URL</p>
         </div>
 
         <h2>🛠️ Available Tools</h2>
@@ -322,6 +346,10 @@ function generateDocumentationHTML(baseUrl: string): string {
                 <tr><td>PHP</td><td>PHP + Composer</td><td>Composer (isolated)</td><td>✅ Project Environment</td></tr>
                 <tr><td>Ruby</td><td>Ruby + Bundler</td><td>Bundler (isolated)</td><td>✅ Gem Environment</td></tr>
                 <tr><td>C#</td><td>.NET Core</td><td>NuGet</td><td>✅ Project Environment</td></tr>
+                <tr><td>Swift</td><td>Swift 5.x</td><td>Swift Package Manager</td><td>✅ Package Environment</td></tr>
+                <tr><td>Objective-C</td><td>Clang</td><td>Build system</td><td>✅ Build Directory</td></tr>
+                <tr><td>Perl</td><td>Perl + CPAN</td><td>cpanm (isolated)</td><td>✅ Local::Lib</td></tr>
+                <tr><td>Lua</td><td>Lua + LuaRocks</td><td>LuaRocks (isolated)</td><td>✅ Local Environment</td></tr>
             </tbody>
         </table>
 
