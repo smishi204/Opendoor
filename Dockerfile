@@ -141,19 +141,9 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'stderr_logfile=/var/log/supervisor/redis.err.log' >> /etc/supervisord.conf && \
     echo 'stdout_logfile=/var/log/supervisor/redis.out.log' >> /etc/supervisord.conf
 
-# Create startup script
-RUN echo '#!/bin/bash' > /start.sh && \
-    echo 'export PORT=${PORT:-3000}' >> /start.sh && \
-    echo 'export NODE_ENV=production' >> /start.sh && \
-    echo 'export WEB_INTERFACE=true' >> /start.sh && \
-    echo 'export MCP_TRANSPORT=sse' >> /start.sh && \
-    echo 'export REDIS_URL=redis://localhost:6379' >> /start.sh && \
-    echo 'echo "🚀 Starting Opendoor on port $PORT"' >> /start.sh && \
-    echo 'echo "🌐 Web interface: WEB_INTERFACE=$WEB_INTERFACE"' >> /start.sh && \
-    echo 'echo "🔧 Environment: NODE_ENV=$NODE_ENV"' >> /start.sh && \
-    echo 'sed -i "s/%(ENV_PORT)s/$PORT/g" /etc/supervisord.conf' >> /start.sh && \
-    echo 'exec supervisord -c /etc/supervisord.conf' >> /start.sh && \
-    chmod +x /start.sh
+# Copy Railway-aware startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

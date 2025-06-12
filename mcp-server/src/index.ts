@@ -480,16 +480,29 @@ async function main(): Promise<void> {
     });
 
     // Start web interface if in development, web mode, or Railway deployment
-    const isRailwayDeployment = process.env.RAILWAY_ENVIRONMENT || process.env.PORT;
+    const isRailwayDeployment = process.env.RAILWAY_ENVIRONMENT || 
+                               process.env.RAILWAY_PROJECT_ID || 
+                               process.env.RAILWAY_SERVICE_ID ||
+                               (process.env.PORT && process.env.NODE_ENV === 'production');
     const useWebInterface = process.env.NODE_ENV === 'development' || 
                            process.env.WEB_INTERFACE === 'true' || 
                            isRailwayDeployment;
     
+    if (isRailwayDeployment) {
+      logger.info('🚂 Railway deployment detected - Starting web interface as primary service');
+    }
+    
     if (useWebInterface) {
       const port = parseInt(process.env.PORT || '3000');
+      logger.info(`🌐 Starting web interface on port ${port} (Railway PORT: ${process.env.PORT || 'not set'})`);
       await startWebInterface(port);
-      logger.info(`📚 Web interface started on port ${port}`);
-      logger.info(`📚 Documentation: http://localhost:${port}`);
+      logger.info(`📚 ✅ Web interface successfully started on port ${port}`);
+      logger.info(`📚 🔗 Documentation: http://localhost:${port}`);
+      
+      if (isRailwayDeployment) {
+        logger.info(`🚂 ✅ Railway web service ready - Main UI accessible on port ${port}`);
+        logger.info(`🚂 🔒 Redis running internally on 127.0.0.1:6379 (not exposed)`);
+      }
     }
 
     // Start the MCP server

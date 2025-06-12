@@ -2,6 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
+startCommand = "npm start"
+healthcheckPath = "/"
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
@@ -9,3 +12,7 @@ restartPolicyMaxRetries = 3
 NODE_ENV = "production"
 WEB_INTERFACE = "true"
 MCP_TRANSPORT = "sse"
+
+# Railway service configuration - Ensure web interface is primary service
+# This prevents Railway from detecting Redis (port 6379) as the main service
+# and ensures the web interface (PORT env var) is exposed externally

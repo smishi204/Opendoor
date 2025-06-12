@@ -8,9 +8,11 @@ cmds = ["npm ci --only=production"]
 cmds = ["npm run build"]
 
 [start]
+# Start web interface directly - Railway will detect PORT usage
 cmd = "npm start"
 
 [variables]
 NODE_ENV = "production"
 WEB_INTERFACE = "true"
 MCP_TRANSPORT = "sse"
+# Railway will automatically set PORT - we ensure it's used for web interface
