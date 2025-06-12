@@ -27,6 +27,31 @@ RUN apk add --no-cache \
     htop \
     && rm -rf /var/cache/apk/*
 
+# Install additional programming languages
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
+    && apk update \
+    && apk add --no-cache \
+    swift \
+    perl \
+    perl-dev \
+    perl-app-cpanminus \
+    lua5.4 \
+    lua5.4-dev \
+    luarocks5.4 \
+    ruby \
+    ruby-dev \
+    ruby-bundler \
+    php82 \
+    php82-cli \
+    php82-json \
+    php82-phar \
+    composer \
+    rust \
+    cargo \
+    dotnet8-sdk \
+    && ln -sf /usr/bin/lua5.4 /usr/bin/lua \
+    && ln -sf /usr/bin/luarocks5.4 /usr/bin/luarocks
+
 # Install Python packages for code execution capabilities
 RUN pip3 install --no-cache-dir --break-system-packages \
     numpy \
