@@ -31,7 +31,6 @@ RUN apk add --no-cache \
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
     && apk update \
     && apk add --no-cache \
-    swift \
     perl \
     perl-dev \
     perl-app-cpanminus \
@@ -51,6 +50,20 @@ RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repos
     dotnet8-sdk \
     && ln -sf /usr/bin/lua5.4 /usr/bin/lua \
     && ln -sf /usr/bin/luarocks5.4 /usr/bin/luarocks
+
+# Install Swift using Swiftly (official Swift toolchain manager)
+RUN curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz \
+    && tar zxf swiftly-$(uname -m).tar.gz \
+    && ./swiftly init --quiet-shell-followup \
+    && . "${SWIFTLY_HOME_DIR:-~/.local/share/swiftly}/env.sh" \
+    && hash -r \
+    && swiftly install latest \
+    && rm -f swiftly-$(uname -m).tar.gz \
+    && rm -f swiftly
+
+# Set up Swift environment for runtime
+ENV SWIFTLY_HOME_DIR=/root/.local/share/swiftly
+ENV PATH="${SWIFTLY_HOME_DIR}/toolchains/latest/usr/bin:${PATH}"
 
 # Install Python packages for code execution capabilities
 RUN pip3 install --no-cache-dir --break-system-packages \
