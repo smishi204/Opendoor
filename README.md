@@ -28,6 +28,12 @@ railway init
 railway up
 ```
 
+**Important**: Railway will automatically expose the web interface on the assigned port. The application includes:
+- Main web UI with documentation and configuration
+- Health endpoints for monitoring
+- SSE transport for MCP connections
+- Redis for session management (internal only)
+
 ### Using Docker (Local Development)
 
 ```bash

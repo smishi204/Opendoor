@@ -451,11 +451,16 @@ async function main(): Promise<void> {
       process.exit(1);
     });
 
-    // Start web interface if in development or web mode
-    const useWebInterface = process.env.NODE_ENV === 'development' || process.env.WEB_INTERFACE === 'true';
+    // Start web interface if in development, web mode, or Railway deployment
+    const isRailwayDeployment = process.env.RAILWAY_ENVIRONMENT || process.env.PORT;
+    const useWebInterface = process.env.NODE_ENV === 'development' || 
+                           process.env.WEB_INTERFACE === 'true' || 
+                           isRailwayDeployment;
+    
     if (useWebInterface) {
       const port = parseInt(process.env.PORT || '3000');
       await startWebInterface(port);
+      logger.info(`📚 Web interface started on port ${port}`);
       logger.info(`📚 Documentation: http://localhost:${port}`);
     }
 
