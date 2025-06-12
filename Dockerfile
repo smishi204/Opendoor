@@ -76,10 +76,11 @@ COPY mcp-server/ .
 # Build the application
 RUN npm run build
 
-# Create Redis configuration
+# Create Redis configuration - bind to localhost only so Railway doesn't detect it
 RUN echo "bind 127.0.0.1" > /etc/redis/redis.conf && \
     echo "port 6379" >> /etc/redis/redis.conf && \
     echo "daemonize no" >> /etc/redis/redis.conf && \
+    echo "protected-mode yes" >> /etc/redis/redis.conf && \
     echo "logfile /var/log/redis/redis.log" >> /etc/redis/redis.conf && \
     echo "dir /var/lib/redis" >> /etc/redis/redis.conf
 
