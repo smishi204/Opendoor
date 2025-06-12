@@ -36,7 +36,7 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'autostart=true' >> /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
     echo '[program:redis]' >> /etc/supervisord.conf && \
-    echo 'command=redis-server --port 6379' >> /etc/supervisord.conf && \
+    echo 'command=redis-server --bind 127.0.0.1 --port 6379 --protected-mode yes' >> /etc/supervisord.conf && \
     echo 'autostart=true' >> /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
     echo '[program:mcp-server]' >> /etc/supervisord.conf && \
@@ -46,11 +46,21 @@ RUN echo '[supervisord]' > /etc/supervisord.conf && \
     echo 'autorestart=true' >> /etc/supervisord.conf && \
     echo 'environment=PORT=%(ENV_PORT)s,NODE_ENV=production,REDIS_URL=redis://localhost:6379' >> /etc/supervisord.conf
 
-# Create startup script
+# Create startup script with Railway detection
 RUN echo '#!/bin/bash' > /start.sh && \
     echo 'export PORT=${PORT:-3000}' >> /start.sh && \
-    echo 'sed -i "s/%(ENV_PORT)s/$PORT/g" /etc/supervisord.conf' >> /start.sh && \
-    echo 'exec supervisord -c /etc/supervisord.conf' >> /start.sh && \
+    echo '' >> /start.sh && \
+    echo '# Check if this is a Railway deployment' >> /start.sh && \
+    echo 'if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_PROJECT_ID" ] || [ -n "$RAILWAY_SERVICE_ID" ]; then' >> /start.sh && \
+    echo '  echo "🚂 Railway deployment detected - starting web interface directly"' >> /start.sh && \
+    echo '  export NODE_ENV=production' >> /start.sh && \
+    echo '  # Start web interface directly without Redis to avoid port conflicts' >> /start.sh && \
+    echo '  exec node dist/index.js' >> /start.sh && \
+    echo 'else' >> /start.sh && \
+    echo '  echo "🐳 Docker deployment detected - using supervisord"' >> /start.sh && \
+    echo '  sed -i "s/%(ENV_PORT)s/$PORT/g" /etc/supervisord.conf' >> /start.sh && \
+    echo '  exec supervisord -c /etc/supervisord.conf' >> /start.sh && \
+    echo 'fi' >> /start.sh && \
     chmod +x /start.sh
 
 # Health check

@@ -297,6 +297,22 @@ async function initializeServices() {
 
 async function main() {
   try {
+    // Detect Railway deployment environment
+    const isRailway = process.env.RAILWAY_ENVIRONMENT || 
+                     process.env.RAILWAY_PROJECT_ID || 
+                     process.env.RAILWAY_SERVICE_ID;
+    
+    if (isRailway) {
+      logger.info('🚂 Railway deployment detected');
+      logger.info('Environment variables:', {
+        RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
+        RAILWAY_PROJECT_ID: process.env.RAILWAY_PROJECT_ID,
+        PORT: process.env.PORT
+      });
+    } else {
+      logger.info('🐳 Docker deployment detected');
+    }
+
     // Initialize services first
     await initializeServices();
 
