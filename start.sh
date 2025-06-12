@@ -14,7 +14,11 @@ if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_PROJECT_ID" ] || [ -n "$RAILW
     export NODE_ENV=production
     
     # Start web interface directly without Redis
-    cd /app && npm start
+    # Use current directory if /app doesn't have package.json (Railway deployment)
+    if [ -f "/app/package.json" ]; then
+        cd /app
+    fi
+    npm start
     
 else
     echo "🐳 Docker deployment detected"
