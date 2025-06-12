@@ -51,19 +51,16 @@ RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repos
     && ln -sf /usr/bin/lua5.4 /usr/bin/lua \
     && ln -sf /usr/bin/luarocks5.4 /usr/bin/luarocks
 
-# Install Swift using Swiftly (official Swift toolchain manager)
-RUN curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz \
-    && tar zxf swiftly-$(uname -m).tar.gz \
-    && ./swiftly init --quiet-shell-followup \
-    && . "${SWIFTLY_HOME_DIR:-~/.local/share/swiftly}/env.sh" \
-    && hash -r \
-    && swiftly install latest \
-    && rm -f swiftly-$(uname -m).tar.gz \
-    && rm -f swiftly
+# Install Swift - use precompiled binaries for Alpine compatibility
+RUN apk add --no-cache libc6-compat libstdc++ \
+    && wget -q https://download.swift.org/swift-5.9.2-release/ubuntu2204/swift-5.9.2-RELEASE/swift-5.9.2-RELEASE-ubuntu22.04.tar.gz \
+    && tar -xzf swift-5.9.2-RELEASE-ubuntu22.04.tar.gz -C /opt \
+    && mv /opt/swift-5.9.2-RELEASE-ubuntu22.04 /opt/swift \
+    && rm swift-5.9.2-RELEASE-ubuntu22.04.tar.gz
 
 # Set up Swift environment for runtime
-ENV SWIFTLY_HOME_DIR=/root/.local/share/swiftly
-ENV PATH="${SWIFTLY_HOME_DIR}/toolchains/latest/usr/bin:${PATH}"
+ENV PATH="/opt/swift/usr/bin:${PATH}"
+ENV SWIFT_ROOT="/opt/swift"
 
 # Install Python packages for code execution capabilities
 RUN pip3 install --no-cache-dir --break-system-packages \
